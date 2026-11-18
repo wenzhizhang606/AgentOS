@@ -1,6 +1,7 @@
 """AC-013. The monitor is a same-origin, read-only client of authorized summaries."""
 
 from html.parser import HTMLParser
+from importlib.resources import files
 import os
 from pathlib import Path
 from unittest.mock import Mock
@@ -11,6 +12,21 @@ import pytest
 
 from agentos.api.app import TaskStore, create_app
 from agentos.governance.auth import Authenticator
+
+
+HOME_PHOTO = "/console/assets/architecture.webp"
+
+
+def route_dashboard(page, serve):
+    """Serve the packaged public photograph alongside the case-specific API fixtures."""
+    def photo(route):
+        assert route.request.method == "GET"
+        assert "authorization" not in route.request.headers
+        image = files("agentos.observability").joinpath("architecture.webp").read_bytes()
+        route.fulfill(content_type="image/webp", body=image)
+
+    page.route("**/*", serve)
+    page.route("http://monitor.invalid" + HOME_PHOTO, photo)
 
 
 def launch_chromium(playwright):
@@ -35,7 +51,7 @@ class DashboardMarkup(HTMLParser):
             self.by_id[attributes["id"]] = attributes
         for key in ("src", "href", "action"):
             if attributes.get(key):
-                self.asset_urls.append(attributes[key])
+                self.asset_urls.append((tag, key, attributes[key]))
 
 
 @pytest.fixture
@@ -56,18 +72,131 @@ def test_ac013_monitor_shell_contains_no_data_or_remote_assets(monitor_page):
     assert "<!-- console scripts -->" not in monitor_page.text
     markup = DashboardMarkup()
     markup.feed(monitor_page.text)
-    assert not markup.asset_urls
+    allowed = {("img", "src", HOME_PHOTO)}
+    allowed.update(("a", "href", path) for path in (
+        "/console", "/console#login", "/console#overview", "/console#runs", "/console#resources"))
+    assert ("img", "src", HOME_PHOTO) in markup.asset_urls
+    assert set(markup.asset_urls) <= allowed
+    assert markup.by_id["home-entry"]["href"] == "/console#login"
+    assert markup.by_id["login-home"]["href"] == "/console"
     assert markup.by_id["token"]["type"] == "password"
     assert "value" not in markup.by_id["token"]
     assert all("hidden" in markup.by_id[panel] for panel in (
-        "actions", "report", "views", "explorer", "run-detail", "project-chip", "disconnect"))
-    assert "hidden" not in markup.by_id["connect-panel"]
+        "actions", "report", "views", "explorer", "run-detail", "project-chip", "disconnect", "connect-panel"))
+    assert "hidden" not in markup.by_id["home-panel"]
     assert markup.by_id["connect-status"]["role"] == "status"
     assert markup.by_id["overview-view"]["aria-controls"] == "report"
     assert markup.by_id["runs-view"]["aria-controls"] == "explorer"
     assert {"metrics", "registered", "capabilities", "tasks", "timeline"} <= markup.by_id.keys()
     assert {"status-chart", "call-chart", "waterfall"} <= markup.by_id.keys()
     assert {"agent-version", "instances", "run-id", "run-facts", "trace", "events-next", "events-prev"} <= markup.by_id.keys()
+
+
+def test_ac013_browser_public_home_login_and_project_history(monitor_page):
+    """Public navigation needs no token; leaving login cancels even a late successful read."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    origin = "http://monitor.invalid"
+    overview_path = "/v1/projects/returns/monitoring"
+    summary = dict(project_id="returns", scope="project", window_start="2026-11-17T00:00:00Z",
+                   window_end="2026-11-18T00:00:00Z", summary={"tasks": 0}, recent_tasks=[],
+                   capabilities=[], active_release={"version_id": "current", "capabilities": []})
+    reads, documents, unexpected = [], [], []
+    revoked = False
+
+    def serve(route):
+        request = route.request
+        url = urlsplit(request.url)
+        if url.netloc == "monitor.invalid" and request.method == "GET" and url.path == "/console":
+            documents.append(request.url)
+            route.fulfill(body=monitor_page.content, content_type="text/html; charset=utf-8",
+                          headers={"Content-Security-Policy": monitor_page.headers["content-security-policy"]})
+        elif url.netloc == "monitor.invalid" and request.method == "GET" and url.path == overview_path:
+            reads.append(request.headers.get("authorization"))
+            if revoked:
+                route.fulfill(status=403, json={"error": {"code": "FORBIDDEN"}})
+            else:
+                route.fulfill(json=summary)
+        elif request.url == origin + "/favicon.ico":
+            route.fulfill(status=204)
+        else:
+            unexpected.append(request.url)
+            route.abort()
+
+    with playwright.sync_playwright() as p:
+        browser = launch_chromium(p)
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 800})
+            route_dashboard(page, serve)
+            page.goto(origin + "/console")
+            home, form = page.locator("#home-panel"), page.locator("#connect")
+            entry = home.locator("#home-entry")
+            assert home.is_visible() and form.is_hidden() and not reads
+            photo = home.locator("img[src='" + HOME_PHOTO + "']")
+            assert photo.is_visible() and photo.evaluate("img => img.complete && img.naturalWidth > 0")
+            for width in (320, 1280):
+                page.set_viewport_size({"width": width, "height": 800})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                assert entry.is_visible()
+            entry.focus()
+            page.keyboard.press("Enter")
+            form.wait_for()
+            assert page.url == origin + "/console#login" and home.is_hidden()
+            page.go_back()
+            home.wait_for()
+            page.go_forward()
+            form.wait_for()
+            assert not reads
+
+            # Delay the return of an actual, already-authorized response beyond a visit to home.
+            page.evaluate("""() => {
+                const fetch = window.fetch.bind(window);
+                let firstReadArrived;
+                window.firstReadArrived = new Promise(resolve => { firstReadArrived = resolve; });
+                window.fetch = async (...args) => {
+                    const response = await fetch(...args);
+                    window.fetch = fetch;
+                    const saved = new Response(await response.text(), {status: response.status});
+                    await new Promise(resolve => { window.releaseFirstRead = resolve; firstReadArrived(); });
+                    return saved;
+                };
+            }""")
+            form.get_by_label("项目 ID", exact=True).fill("returns")
+            token = form.get_by_label("访问令牌", exact=True)
+            token.fill("fixture-observer")
+            form.locator("button[type=submit]").click()
+            page.evaluate("() => window.firstReadArrived")
+            page.locator("#login-home").click()
+            home.wait_for()
+            page.evaluate("""async () => {
+                window.releaseFirstRead();
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            }""")
+            assert home.is_visible() and page.locator("#report").is_hidden()
+            assert page.locator("#connected-project").text_content() == "" and token.input_value() == ""
+
+            entry.click()
+            form.get_by_label("项目 ID", exact=True).fill("returns")
+            token.fill("fixture-observer")
+            form.locator("button[type=submit]").click()
+            page.locator("#report").wait_for()
+            assert page.url == origin + "/console#overview"
+            page.get_by_role("link", name="AgentOS 主页", exact=True).click()
+            home.wait_for()
+            assert page.locator("#report").is_hidden()
+            entry.click()
+            page.locator("#report").wait_for()
+            assert page.url == origin + "/console#overview" and form.is_hidden()
+            assert page.locator("#connected-project").inner_text() == "returns"
+            page.get_by_role("link", name="AgentOS 主页", exact=True).click()
+            home.wait_for()
+            revoked = True
+            entry.click()
+            form.locator("#connect-status").filter(has_text="HTTP 403").wait_for()
+            assert token.input_value() == "" and page.locator("#report").is_hidden()
+            assert reads == ["Bearer fixture-observer"] * 4
+            assert len(documents) == 1 and not unexpected
+        finally:
+            browser.close()
 
 
 def test_ac013_browser_project_login_waits_for_permission_and_recovers(monitor_page):
@@ -101,7 +230,7 @@ def test_ac013_browser_project_login_waits_for_permission_and_recovers(monitor_p
             page = browser.new_page(viewport={"width": 320, "height": 760})
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
-            page.route("**/*", serve)
+            route_dashboard(page, serve)
             page.goto(origin + "/console#runs")
             form = page.locator("#connect")
             project = form.get_by_label("项目 ID", exact=True)
@@ -171,7 +300,8 @@ def test_ac013_browser_project_login_waits_for_permission_and_recovers(monitor_p
                 window.finishRefresh();
                 await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
             }""")
-            assert form.is_visible() and page.locator("#explorer").is_hidden()
+            assert page.locator("#home-panel").is_visible() and form.is_hidden()
+            assert page.locator("#explorer").is_hidden() and page.url == origin + "/console"
             assert page.locator("#agent-scope").text_content() == page.locator("#connected-project").text_content() == ""
             assert not unexpected and not errors
         finally:
@@ -233,15 +363,18 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
         browser = launch_chromium(p)
         page = browser.new_page(viewport={"width": 320, "height": 760})
         try:
-            page.route("**/*", serve)
+            route_dashboard(page, serve)
             page.goto(origin + "/console")
             assert not seen and not unexpected
             fits_viewport = "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
             assert page.evaluate(fits_viewport)
+            assert page.locator("#home-panel").is_visible()
+            page.locator("#home-entry").click()
             page.get_by_label("项目 ID", exact=True).fill(tenant_project)
             page.get_by_label("访问令牌", exact=True).fill(token)
             page.get_by_role("button", name="载入项目").click()
             page.locator("#report").wait_for()
+            assert page.url == origin + "/console#overview"
             assert page.get_by_role("heading", level=1, name="项目概览").is_visible()
             assert page.locator("#project-chip").is_visible()
             assert page.locator("#connected-project").inner_text() == tenant_project
@@ -289,6 +422,7 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             overview["summary"].update(tasks=0, failed=0, succeeded=0, tool_calls=0, dispatches=0)
             overview["summary"].pop("skill_calls")
             overview.update(recent_tasks=[], capabilities=[])
+            page.locator("#home-entry").click()
             page.get_by_label("项目 ID", exact=True).fill(tenant_project)
             page.get_by_label("访问令牌", exact=True).fill(token)
             page.get_by_role("button", name="载入项目").click()
@@ -412,7 +546,7 @@ def test_ac013_browser_agent_paging_attempts_history_scope_and_revocation(monito
         browser = launch_chromium(p)
         try:
             page = browser.new_page()
-            page.route("**/*", serve)
+            route_dashboard(page, serve)
             page.goto("http://monitor.invalid/monitor")
             page.get_by_label("项目 ID", exact=True).fill("returns")
             page.get_by_label("访问令牌", exact=True).fill(token)
@@ -599,10 +733,11 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
         browser = launch_chromium(p)
         page = browser.new_page(viewport={"width": 320, "height": 760})
         try:
-            page.route("**/*", serve)
+            route_dashboard(page, serve)
             page.goto(origin + "/resources")
             assert page.url == origin + "/console#resources"
-            assert page.title() == "AgentOS 控制台"
+            assert page.locator("#connect-panel").is_visible()
+            assert page.locator("#home-panel").is_hidden()
             assert not requests
             skill_count, tool_count = page.locator("#skill-inventory"), page.locator("#tool-inventory")
             table = page.locator("#catalog-table")
@@ -668,7 +803,7 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
 
             page.locator("#overview-view").click()
             page.locator("#report").wait_for()
-            assert page.url == origin + "/console"
+            assert page.url == origin + "/console#overview"
             assert table.text_content() == "" and not page.locator("#resources").is_visible()
             page.locator("#resources-view").click()
             table.get_by_text("unused-guidance").wait_for()

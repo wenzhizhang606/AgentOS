@@ -28,7 +28,7 @@
 
 ## 查看监控
 
-打开 `/console`，使用项目 ID 和 Bearer 凭证登录。项目概览按任务展示实际调用。“Agent 运行轨迹”（`/console#runs`）可查看一次执行尝试，“资源管理”（`/console#resources`）可核对活动发布的完整目录。切换标签复用页面内存中的凭证，各数据请求均由服务端核验访问范围和 MySQL 当前项目成员关系。旧书签 `/monitor` 和 `/resources` 会进入对应视图。[实例轨迹](agent-run-trace.md)
+打开 `/console` 主页，点击「进入控制台」，使用项目 ID 和 Bearer 凭证登录。项目概览按任务展示实际调用。“Agent 运行轨迹”（`/console#runs`）可查看一次执行尝试，“资源管理”（`/console#resources`）可核对活动发布的完整目录。切换标签复用页面内存中的凭证，各数据请求均由服务端核验访问范围和 MySQL 当前项目成员关系。旧书签 `/monitor` 和 `/resources` 会进入对应视图。[实例轨迹](agent-run-trace.md)
 
 | 入口 | 数据与范围 |
 | --- | --- |

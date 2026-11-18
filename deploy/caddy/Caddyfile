@@ -21,7 +21,7 @@ https://{$AGENTOS_PUBLIC_IP}:8000, https://{$AGENTOS_PUBLIC_IP} {
 
 	@dashboard {
 		method GET HEAD
-		path /console /monitor /resources
+		path /console /monitor /resources /console/assets/architecture.webp
 	}
 
 	@observations {

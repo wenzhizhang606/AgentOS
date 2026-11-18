@@ -8,11 +8,15 @@
     timed_out:"超时", cancelled:"取消", dispatch_admitted:"模型发送准入", receipt_settled:"费用结算"};
   const kinds = {task:"任务", context:"上下文", skill:"Skill", tool:"Tool", model:"模型"};
   let connection = null, selected = null, projectRead = null, taskRead = null, timer = null;
+  const routes = new Set(["login","overview","runs","resources"]);
   function initialView() {
-    if (location.pathname === "/resources" || location.hash === "#resources") return "resources";
-    return location.hash === "#runs" ? "runs" : "overview";
+    const fragment = location.hash.slice(1);
+    if (routes.has(fragment)) return fragment;
+    if (location.pathname === "/resources") return "resources";
+    if (location.pathname === "/monitor") return "overview";
+    return "home";
   }
-  const viewUrl = name => "/console" + (name === "overview" ? "" : "#" + name);
+  const viewUrl = name => name === "home" ? "/console" : "/console#" + name;
   let view = initialView(), agent = "", instance = null;
   let inventory = [];
   function pageState() { return {previous:[], cursor:null, next:null}; }
@@ -37,7 +41,7 @@
   }
   function schedule() {
     clearTimeout(timer);
-    if (connection?.verified && byId("automatic").checked && !document.hidden) {
+    if (view !== "home" && connection?.verified && byId("automatic").checked && !document.hidden) {
       timer = setTimeout(refresh, 30000);
     }
   }
@@ -54,11 +58,16 @@
     for (const id of ["metrics","status-chart","call-chart","capabilities","tasks","scope","window","task-count","registered","release","cap-status"]) byId(id).replaceChildren();
   }
   function showConnection() {
-    const open = connection?.verified === true;
-    const checking = connection !== null && !open;
-    byId("connect-panel").hidden = open;
-    for (const id of ["actions","views","project-chip","disconnect","status"]) byId(id).hidden = !open;
-    byId("connected-project").textContent = open ? connection.project : "";
+    const home = view === "home";
+    const verified = connection?.verified === true;
+    const workspace = !home && verified;
+    const checking = connection !== null && !verified;
+    byId("home-panel").hidden = !home;
+    byId("connect-panel").hidden = home || verified;
+    document.querySelector(".page-header").hidden = !workspace;
+    for (const id of ["actions","views","status"]) byId(id).hidden = !workspace;
+    for (const id of ["project-chip","disconnect"]) byId(id).hidden = !verified;
+    byId("connected-project").textContent = verified ? connection.project : "";
     byId("connect").querySelector("button[type=submit]").disabled = checking;
     byId("project").readOnly = checking;
     byId("token").readOnly = checking;
@@ -67,6 +76,10 @@
   function openProject() {
     if (connection.verified) return;
     connection.verified = true;
+    if (view === "login") {
+      view = "overview";
+      history.replaceState(null, "", viewUrl(view));
+    }
     byId("token").value = "";
     byId("connect-status").textContent = "";
     showConnection();
@@ -76,7 +89,6 @@
     clearTimeout(timer);
     projectRead?.abort(); projectRead = null; connection = null;
     clearProject();
-    view = initialView();
     showConnection();
     byId("automatic").checked = false;
     if (!keepToken) byId("token").value = "";
@@ -105,7 +117,8 @@
     const name = resources ? "资源管理" : view === "runs" ? "Agent 运行轨迹" : "项目概览";
     byId("page-title").textContent = name;
     byId("hours").closest("label").hidden = resources;
-    document.title = connection?.verified ? name + " · AgentOS 控制台" : "AgentOS 控制台";
+    document.title = view === "home" ? "AgentOS 控制台" :
+      (connection?.verified ? name : "登录项目") + " · AgentOS 控制台";
   }
   function clearTrace() {
     byId("run-detail").hidden = true;
@@ -335,7 +348,7 @@
     if (restoreFocus) byId("resource-search").focus();
   }
   async function refresh() {
-    if (!connection) return;
+    if (!connection || view === "home") return;
     if (view === "runs") return loadExplorer("agents");
     clearTimeout(timer);
     projectRead?.abort();
@@ -663,15 +676,28 @@
     if (!events.length) empty(table, 7, "尚无可见事件。");
   }
   function switchView(next, navigate = true, run = null) {
+    if (next === "login" && connection?.verified) next = "overview";
+    const url = viewUrl(next);
+    if (location.pathname + location.hash !== url) {
+      if (navigate) history.pushState(null, "", url);
+      else history.replaceState(null, "", url);
+    }
     if (view === next) return;
-    projectRead?.abort(); taskRead?.abort();
+    clearTimeout(timer);
+    projectRead?.abort(); projectRead = null;
     view = next;
-    if (navigate) history.pushState(null, "", viewUrl(view));
-    setViewButtons();
-    byId("report").hidden = true;
-    clearInventory();
-    resetExplorer();
-    clearDetail();
+    if (!connection?.verified) {
+      disconnect();
+      if (next === "home") byId("project").value = "";
+    } else {
+      clearProject();
+      byId("status").textContent = "";
+      showConnection();
+    }
+    if (view === "home" || !connection) {
+      byId(view === "home" ? "home-heading" : "connect-heading").focus();
+      return;
+    }
     if (run) {
       byId("run-id").value = run.run_id;
       chooseRun(run);
@@ -694,7 +720,18 @@
     event.preventDefault();
     closeResourceDetail();
   });
+  document.addEventListener("click", event => {
+    const link = event.target.closest("a[href]");
+    if (!link || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey ||
+        event.shiftKey || event.altKey || link.target || link.hasAttribute("download")) return;
+    const url = new URL(link.href);
+    if (url.origin !== location.origin || url.pathname !== "/console" || url.search ||
+        (url.hash && !routes.has(url.hash.slice(1)))) return;
+    event.preventDefault();
+    switchView(url.hash.slice(1) || "home");
+  });
   window.addEventListener("popstate", () => switchView(initialView(), false));
+  window.addEventListener("hashchange", () => switchView(initialView(), false));
   byId("agent-version").addEventListener("change", event => {
     agent = event.target.value; instance = null; runPage = pageState();
     byId("run-id").value = "";
@@ -718,7 +755,7 @@
   }
   byId("connect").addEventListener("submit", event => {
     event.preventDefault();
-    if (connection) return;
+    if (connection || view === "home") return;
     const project = byId("project").value.trim(), token = byId("token").value.trim();
     if (!project || !token || project === "." || project === "..") {
       byId("connect-status").textContent = "请填写有效的项目 ID 和访问令牌。";
@@ -732,8 +769,11 @@
     refresh();
   });
   byId("disconnect").addEventListener("click", () => {
+    view = "home";
+    history.replaceState(null, "", viewUrl(view));
     disconnect();
-    byId("project").focus();
+    byId("project").value = "";
+    byId("home-heading").focus();
   });
   byId("refresh").addEventListener("click", refresh);
   byId("automatic").addEventListener("change", schedule);

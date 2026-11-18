@@ -7,6 +7,7 @@
 !src/agentos/**/
 !src/agentos/**/*.py
 !src/agentos/observability/dashboard.html
+!src/agentos/observability/architecture.webp
 !src/agentos/observability/console.css
 !src/agentos/observability/console.js
 !src/agentos/observability/components.js

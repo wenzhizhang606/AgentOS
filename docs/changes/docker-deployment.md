@@ -8,7 +8,7 @@
 
 | 方法和路径 | 可以看到什么 |
 | --- | --- |
-| `GET /console` | 打开项目概览。书签 `/console#runs` 直达 Agent 运行轨迹，`/console#resources` 直达资源管理。已有的 `/monitor`、`/resources` 书签分别进入项目概览和资源管理。 |
+| `GET /console` | 打开公开主页，点击「进入控制台」登录。`/console#overview` 为项目概览。书签 `/console#runs` 直达 Agent 运行轨迹，`/console#resources` 直达资源管理。已有的 `/monitor`、`/resources` 书签分别进入项目概览和资源管理。 |
 | `GET /v1/projects/{project_id}/resources` | 查看当前发布启用的 Skill 与 Tool 数量、名称、版本和摘要。 |
 | `GET /v1/projects/{project_id}/monitoring` | 项目内的任务状态、能力清单与实际调用、P95 耗时、Token、已结算费用与待核对回执。 |
 | `GET /v1/tasks/{task_id}/timeline` | 一次任务中的排队和领取、上下文准备、Skill、Tool、模型准入和费用回执。 |
@@ -72,7 +72,7 @@
    docker compose exec -T api agentos release-id
    ```
 
-   打开 `http://127.0.0.1:8000/console`，输入项目 `support` 和第二步生成的令牌。已有运行可在“Agent 运行轨迹”查看。首次提交可使用 [M1 请求示例](m1-managed-support.md)，将其中的 `(agentos release-id)` 改为 `(docker compose exec -T api agentos release-id)`。查看特定服务日志可运行 `docker compose logs --tail=100 worker`。
+   打开 `http://127.0.0.1:8000/console`，点击「进入控制台」，输入项目 `support` 和第二步生成的令牌。已有运行可在“Agent 运行轨迹”查看。首次提交可使用 [M1 请求示例](m1-managed-support.md)，将其中的 `(agentos release-id)` 改为 `(docker compose exec -T api agentos release-id)`。查看特定服务日志可运行 `docker compose logs --tail=100 worker`。
 
 ## 持久化和升级
 

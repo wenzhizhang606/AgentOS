@@ -7,8 +7,9 @@ from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.exceptions import HTTPException
 
@@ -98,6 +99,7 @@ def error_response(request: Request, status: int, code: str, message: str) -> JS
 def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id: str,
                *, capability_catalog=()) -> FastAPI:
     app = FastAPI(title="AgentOS M1", version="1")
+    console_assets = StaticFiles(packages=[("agentos.observability", ".")])
     # Freeze the public projection at the same boundary as the active release ID.
     resources = tuple(
         {field: entry[field] for field in ("kind", "name", "version", "digest")}
@@ -110,7 +112,7 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
         request.state.request_id = uuid4().hex
         response = await call_next(request)
         response.headers["X-Request-Id"] = request.state.request_id
-        response.headers["Cache-Control"] = "no-store"
+        response.headers.setdefault("Cache-Control", "no-store")
         return response
 
     @app.exception_handler(PlatformError)
@@ -170,13 +172,26 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
             return JSONResponse(status_code=503, content={"status": "not_ready"})
         return {"status": "ready"}
 
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+    def home():
+        return RedirectResponse("/console", status_code=302)
+
+    @app.api_route("/console/assets/architecture.webp", methods=["GET", "HEAD"], include_in_schema=False)
+    async def home_image(request: Request):
+        response = await console_assets.get_response("architecture.webp", request.scope)
+        if response.status_code in (200, 206, 304):
+            response.headers["Cache-Control"] = "public, max-age=3600"
+            if response.status_code != 304:
+                response.headers["Content-Type"] = "image/webp"
+        return response
+
     @app.api_route("/console", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
     @app.api_route("/resources", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
     @app.api_route("/monitor", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
     def dashboard():
         return HTMLResponse(console_html(), headers={
             "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; "
-                                       "style-src 'unsafe-inline'; connect-src 'self'; "
+                                       "style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; "
                                        "frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
             "Referrer-Policy": "no-referrer",
         })

@@ -95,3 +95,9 @@ def test_ac028_compose_services_and_probes():
             assert json.load(reply) == {"status": status}
     with urlopen(f"http://{address}/monitor", timeout=8) as reply:
         assert reply.status == 200 and reply.headers.get_content_type() == "text/html"
+    with urlopen(f"http://{address}/", timeout=8) as reply:
+        assert reply.status == 200 and reply.geturl() == f"http://{address}/console"
+        assert "img-src 'self'" in reply.headers["Content-Security-Policy"]
+    with urlopen(f"http://{address}/console/assets/architecture.webp", timeout=8) as reply:
+        assert reply.status == 200 and reply.headers.get_content_type() == "image/webp"
+        assert reply.read(12)[8:12] == b"WEBP"

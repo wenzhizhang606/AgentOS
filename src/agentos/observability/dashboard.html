@@ -10,7 +10,7 @@
 <body>
 <header class="topbar">
   <div class="top-inner">
-    <div class="brand"><strong><span class="brand-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2.5 15 6.2-9.4 6.3 9.4m-5.2 3.4L16 9l5.5 8.2M6.8 15h5.8"/></svg></span>AgentOS</strong><span class="product-name">控制台</span></div>
+    <a class="brand" href="/console" aria-label="AgentOS 主页"><strong><span class="brand-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2.5 15 6.2-9.4 6.3 9.4m-5.2 3.4L16 9l5.5 8.2M6.8 15h5.8"/></svg></span>AgentOS</strong><span class="product-name">控制台</span></a>
     <nav aria-label="控制台视图" id="views" hidden>
       <button type="button" class="nav-item" id="overview-view" aria-pressed="true" aria-controls="report">项目概览</button>
       <button type="button" class="nav-item" id="runs-view" aria-pressed="false" aria-controls="explorer">Agent 运行轨迹</button>
@@ -21,20 +21,98 @@
   </div>
 </header>
 <main id="main-content">
-  <section id="connect-panel" aria-labelledby="connect-heading">
-    <h1 id="connect-heading">登录项目</h1>
-    <p class="entry-instruction">使用管理员提供的项目 ID 和访问令牌。</p>
-    <form id="connect" autocomplete="off">
-      <label for="project">项目 ID</label>
-      <input id="project" name="project" type="text" required maxlength="128" spellcheck="false">
-      <label for="token">访问令牌</label>
-      <input id="token" type="password" required autocomplete="off" spellcheck="false" aria-describedby="token-help">
-      <p id="token-help" class="note">令牌仅用于当前页面，关闭后需重新输入。</p>
-      <p id="connect-status" role="status" aria-live="polite"></p>
-      <button class="primary" type="submit">载入项目</button>
-    </form>
+  <section id="home-panel" aria-labelledby="home-heading">
+    <img class="home-panorama" src="/console/assets/architecture.webp" alt="" width="2172" height="724" fetchpriority="high">
+    <div class="home-sheet">
+      <div class="home-intro">
+        <div><h1 id="home-heading" tabindex="-1">AgentOS 项目控制台</h1>
+          <p>了解项目运行情况，追踪 Agent 执行过程，浏览当前发布的能力。</p>
+        </div>
+        <a id="home-entry" href="/console#login">进入控制台<span aria-hidden="true">→</span></a>
+      </div>
+      <nav class="home-destinations" aria-label="工作区入口">
+        <a href="/console#overview"><strong>项目概览<span aria-hidden="true">↗</span></strong><span>查看任务、调用量与费用</span></a>
+        <a href="/console#runs"><strong>运行轨迹<span aria-hidden="true">↗</span></strong><span>追踪每次运行的步骤与耗时</span></a>
+        <a href="/console#resources"><strong>资源管理<span aria-hidden="true">↗</span></strong><span>查找已发布的 Skill 与 Tool</span></a>
+      </nav>
+    </div>
   </section>
-  <div class="page-header">
+  <section id="connect-panel" aria-labelledby="connect-heading" hidden>
+    <div class="login-identity">
+      <div class="login-identity-inner">
+        <div class="login-identity-intro">
+          <h2>项目控制台</h2>
+          <p>追踪 Agent 运行，查看上下文与组件调用。</p>
+        </div>
+        <figure class="login-scheme">
+          <svg viewBox="0 0 600 348" role="img" aria-label="Agent 执行架构示意，上下文、Skill、Tool 与模型围绕执行核心。">
+            <defs>
+              <pattern id="base-grid" width="20" height="10" patternUnits="userSpaceOnUse"><path d="m-10 0 20 10L30 0M0 0l20 10" fill="none" stroke="#8e979a" stroke-width=".45" opacity=".6"/></pattern>
+              <pattern id="edge-lines" width="5" height="5" patternUnits="userSpaceOnUse"><path d="m1 0 0 5" stroke="#121416" stroke-width=".8" opacity=".6"/></pattern>
+            </defs>
+            <g fill="none" stroke-linejoin="round">
+              <path d="m64 202 220 109 244-120M80 130 244 49m119 260 166-82" stroke="#50575a" stroke-width=".8" stroke-dasharray="3 6"/>
+              <g stroke="#747c7d" stroke-width="1">
+                <path d="m55 118 40 20 46-23 60 29m202-28 50-25 37 18 54-27"/>
+                <path d="m58 123 37 19 46-23 51 25m226-30 35-18 37 18 41-20" opacity=".4"/>
+                <path d="m65 253 63-31 42 21 31-15m219-6 45 22 26-13 53 26"/>
+              </g>
+              <path d="m128 222 42 21 41-21m166-91 76-40 37 18 54-27" stroke="#c57b66" stroke-width="1.5"/>
+            </g>
+            <g fill="#202326" stroke="#c78b79" stroke-width="1.4">
+              <circle cx="55" cy="118" r="3.6"/><circle cx="65" cy="253" r="3.6"/><circle cx="544" cy="82" r="3.6"/><circle cx="544" cy="257" r="3.6"/>
+            </g>
+            <g stroke-linejoin="round" stroke-width="1">
+              <path d="m145 204 160-79 150 74v12l-160 80-150-76z" fill="#383e41" stroke="#747e80"/>
+              <path d="m145 204 160-79 150 74-160 80z" fill="#4b5255" stroke="#8c9495"/>
+              <path d="m145 204 160-79 150 74-160 80z" fill="url(#base-grid)"/>
+              <path d="m147 206 147 73v10l-147-74z" fill="url(#edge-lines)"/>
+              <path d="m169 201 136-66 127 63-137 68z" fill="none" stroke="#959d9e" stroke-dasharray="2 5"/>
+              <path d="m190 167 113-56 109 53v13l-113 56-109-53z" fill="#4b5357" stroke="#828a8d"/>
+              <path d="m190 167 113-56 109 53-113 56z" fill="#788183" stroke="#a8afb0"/>
+              <path d="m211 167 93-46 84 42-91 45z" fill="#626b6c" stroke="#8c9495"/>
+              <path d="m190 112 113-55 109 54v19l-113 56-109-55z" fill="#923e33" stroke="#cd7762"/>
+              <path d="m190 112 109 55v19l-109-55z" fill="#b65242" stroke="#cc715e"/>
+              <path d="m190 112 113-55 109 54-113 56z" fill="#d8816b" stroke="#e5a492"/>
+              <path d="m202 112 101-49 97 48-101 50z" fill="none" stroke="#e8a594"/>
+              <path d="m259 123 38-43 16 8 31 30-14 7-25-26-24 27-9 4z" fill="#fff1df"/>
+              <path d="m289 122 15-16 11 12-16 8z" fill="#f6dfca"/>
+            </g>
+            <g fill="none" stroke="#ad8d80" stroke-width=".8" stroke-dasharray="2.4 4">
+              <path d="M190 136v22m109 29v27m113-80v22m-222 29v37m109 14v33m113-88v31"/>
+            </g>
+            <g>
+              <text x="33" y="101">Context</text><text x="43" y="279">Skill</text>
+              <text x="550" y="67" text-anchor="end">Tool</text><text x="557" y="282" text-anchor="end">Model</text>
+            </g>
+          </svg>
+        </figure>
+      </div>
+    </div>
+    <div class="login-form-side">
+      <div class="login-form-inner">
+        <a id="login-home" href="/console"><span aria-hidden="true">←</span> 返回主页</a>
+        <h1 id="connect-heading" tabindex="-1">登录项目</h1>
+        <p class="entry-instruction">使用管理员提供的项目 ID 和访问令牌。</p>
+        <form id="connect" autocomplete="off">
+          <label for="project">项目 ID</label>
+          <div class="login-field">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="m12 2 9 5v10l-9 5-9-5V7zM3 7l9 5 9-5m-9 5v10"/></svg>
+            <input id="project" name="project" type="text" required maxlength="128" spellcheck="false">
+          </div>
+          <label for="token">访问令牌</label>
+          <div class="login-field">
+            <svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 5v2"/></svg>
+            <input id="token" type="password" required autocomplete="off" spellcheck="false" aria-describedby="token-help">
+          </div>
+          <p id="token-help" class="note">令牌仅用于当前页面，关闭后需重新输入。</p>
+          <p id="connect-status" role="status" aria-live="polite"></p>
+          <button class="primary" type="submit">载入项目<span aria-hidden="true">→</span></button>
+        </form>
+      </div>
+    </div>
+  </section>
+  <div class="page-header" hidden>
     <div class="page-heading">
       <h1 id="page-title" tabindex="-1">项目概览</h1>
       <p id="status" role="status" aria-live="polite" hidden></p>
