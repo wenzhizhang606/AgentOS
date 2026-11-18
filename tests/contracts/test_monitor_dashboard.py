@@ -92,6 +92,91 @@ def test_ac013_monitor_shell_contains_no_data_or_remote_assets(monitor_page):
     assert {"agent-version", "instances", "run-id", "run-facts", "trace", "events-next", "events-prev"} <= markup.by_id.keys()
 
 
+def test_ac013_public_walkthrough_follows_components_without_project_requests(monitor_page):
+    playwright = pytest.importorskip("playwright.sync_api")
+    origin = "http://monitor.invalid"
+    unexpected, errors = [], []
+
+    def serve(route):
+        if route.request.url == origin + "/console":
+            route.fulfill(body=monitor_page.content, content_type="text/html; charset=utf-8",
+                          headers={"Content-Security-Policy": monitor_page.headers["content-security-policy"]})
+        elif route.request.url == origin + "/favicon.ico":
+            route.fulfill(status=204)
+        else:
+            unexpected.append(route.request.url)
+            route.abort()
+
+    with playwright.sync_playwright() as p:
+        browser = launch_chromium(p)
+        try:
+            page = browser.new_page(viewport={"width": 1280, "height": 850}, reduced_motion="reduce")
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            route_dashboard(page, serve)
+            page.clock.install()
+            page.goto(origin + "/console")
+            demo = page.locator("#home-walkthrough")
+            diagram = page.locator("#agent-diagram")
+            play, previous, advance = (demo.locator(selector) for selector in ("#walk-play", "#walk-prev", "#walk-next"))
+
+            def verify_step(module):
+                assert diagram.get_attribute("data-active") == module
+                current = demo.locator('[aria-current="step"]')
+                assert current.count() == 1 and current.get_attribute("data-module") == module
+                surface = diagram.locator(f'[data-module="{module}"] .diagram-surface')
+                assert surface.evaluate("el => parseFloat(getComputedStyle(el).strokeWidth)") >= 3
+
+            verify_step("skill")
+            page.clock.fast_forward(30_000)
+            verify_step("skill")
+            assert previous.is_disabled()
+            advance.focus()
+            page.keyboard.press("Enter")
+            verify_step("tool")
+            previous.click()
+            play.click()
+            page.clock.fast_forward(30_000)
+            verify_step("tool")
+            play.click()
+            page.clock.fast_forward(30_000)
+            verify_step("tool")
+            for module in ("context", "model", "trace"):
+                advance.click()
+                verify_step(module)
+                if module == "model":
+                    assert "[E1]" in demo.inner_text()
+            assert advance.is_disabled()
+
+            play.click()
+            verify_step("skill")
+            demo.locator('[data-scene="invoice"]').click()
+            assert "发票" in demo.locator("#walk-question").inner_text()
+            page.clock.fast_forward(30_000)
+            verify_step("skill")
+            for module in ("tool", "context", "trace"):
+                advance.click()
+                verify_step(module)
+                if module == "context":
+                    assert "MISSING_EVIDENCE" in demo.locator("#walk-artifact").inner_text()
+            assert advance.is_disabled() and "模型准入 0 次" in demo.locator("#walk-artifact").inner_text()
+
+            for width in (320, 1000, 1440):
+                page.set_viewport_size({"width": width, "height": 850})
+                assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+                assert diagram.bounding_box()["width"] > 200 and play.is_visible()
+            play.click()
+            page.locator("#home-entry").click()
+            page.locator("#connect").wait_for()
+            page.locator("#login-home").click()
+            page.locator("#home-panel").wait_for()
+            returned_step = diagram.get_attribute("data-active")
+            page.clock.fast_forward(30_000)
+            assert diagram.get_attribute("data-active") == returned_step
+            assert not unexpected and not errors
+        finally:
+            browser.close()
+
+
 def test_ac013_browser_public_home_login_and_project_history(monitor_page):
     """Public navigation needs no token; leaving login cancels even a late successful read."""
     playwright = pytest.importorskip("playwright.sync_api")

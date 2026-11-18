@@ -212,20 +212,94 @@ tbody tr.selected td:first-child { box-shadow: inset 3px 0 var(--accent); }
 /* The public home and the sign-in composition use the full viewport. */
 main:has(> :is(#home-panel, #connect-panel):not([hidden])) { width: 100%; max-width: none; padding: 0; }
 #home-panel { min-height: calc(100svh - var(--bar-height)); padding-bottom: clamp(32px, 6vw, 80px); background: #f3f1ed; color: #241f1d; }
-.home-panorama { display: block; width: 100%; height: clamp(215px, 46svh, 508px); object-fit: cover; object-position: center 52%; background: #dac9b8; }
-.home-sheet { position: relative; width: min(calc(100% - 2 * var(--gutter)), 1280px); margin: -40px auto 0; border-top: 3px solid var(--accent); padding: clamp(24px, 3vw, 46px) clamp(24px, 4vw, 62px); background: var(--paper); }
+.home-panorama { display: block; width: 100%; height: clamp(215px, 35svh, 420px); object-fit: cover; object-position: center 52%; background: #dac9b8; }
+.home-sheet { position: relative; width: min(calc(100% - 2 * var(--gutter)), 1280px); margin: -40px auto 0; border-top: 3px solid var(--accent); padding: clamp(22px, 2.2vw, 34px) clamp(24px, 4vw, 62px); background: var(--paper); }
 .home-intro { display: flex; align-items: center; justify-content: space-between; gap: var(--s6); }
 #home-heading { font-size: clamp(31px, 3.8vw, 57px); line-height: 1.17; letter-spacing: -.06em; }
 .home-intro p { margin-top: 11px; color: #625953; font-size: clamp(14px, 1.12vw, 17px); }
 #home-entry { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 18px; min-height: 47px; padding: 9px 23px; background: var(--accent); border: 1px solid var(--accent); border-radius: 2px; color: white; text-decoration: none; font-size: 15px; font-weight: 600; }
 #home-entry:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
-.home-destinations { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: clamp(23px, 3.3vw, 44px); border-top: 1px solid var(--line); padding-top: var(--s5); }
+.home-destinations { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: clamp(20px, 2.2vw, 32px); border-top: 1px solid var(--line); padding-top: var(--s4); }
 .home-destinations a { display: grid; gap: 4px; padding-block: 3px; color: inherit; text-decoration: none; }
 .home-destinations a + a { padding-left: clamp(15px, 2.4vw, 38px); border-left: 1px solid var(--line); }
 .home-destinations strong { font-size: 17px; font-weight: 600; }
 .home-destinations strong span { display: inline-block; margin-left: 9px; color: var(--accent); font-size: 14px; }
 .home-destinations a > span { color: #635d59; font-size: 13px; }
 .home-destinations a:hover strong { color: var(--accent-strong); text-decoration: underline; text-underline-offset: 4px; }
+
+/* The component map and its example share one reading surface below the entry links. */
+.home-learn {
+  --learn-inset: clamp(24px, 4vw, 62px);
+  display: grid;
+  grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+  width: min(calc(100% - 2 * var(--gutter)), 1280px);
+  margin: clamp(14px, 1.5vw, 22px) auto 0;
+  padding: clamp(24px, 3vw, 42px) var(--learn-inset);
+  background: var(--paper);
+}
+.home-components { padding-right: clamp(20px, 2.5vw, 40px); }
+#home-walkthrough { padding-left: clamp(20px, 2.5vw, 40px); border-left: 1px solid var(--line); }
+.home-section-heading h2 { font-size: clamp(22px, 2.15vw, 32px); line-height: 1.3; letter-spacing: -.045em; }
+.home-section-heading p, .home-component-figure figcaption { color: #635b55; font-size: 14px; line-height: 1.7; }
+.home-section-heading p { margin-top: 6px; }
+.home-component-figure { margin: 22px 0 0; }
+#agent-diagram { display: block; width: 100%; height: auto; }
+.home-component-figure figcaption { margin-top: 14px; max-width: 37em; }
+#agent-diagram :is([data-active=runtime] [data-module=runtime], [data-active=skill] [data-module=skill],
+                   [data-active=tool] [data-module=tool], [data-active=context] [data-module=context],
+                   [data-active=model] [data-module=model], [data-active=trace] [data-module=trace]) .diagram-surface {
+  stroke: var(--accent-strong); stroke-width: 3; fill: #fbe0dc;
+}
+
+.walk-scenes { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.walk-scenes button { min-height: 36px; border-color: #d6d0ca; border-radius: 2px; color: #4c443e; font-size: 13px; }
+.walk-scenes button[aria-pressed=true], .walk-scenes button[aria-pressed=true]:hover {
+  border-color: var(--accent); background: #fff4f2; color: var(--accent-strong); font-weight: 650;
+}
+.walk-question { margin-bottom: 16px; }
+.walk-label { color: #625b56; font-size: 12px; }
+#walk-question { margin-top: 3px; color: #292523; font-size: clamp(16px, 1.25vw, 19px); font-weight: 600; line-height: 1.5; }
+.walk-steps { display: flex; gap: 0; margin: 0; padding: 0; list-style: none; }
+.walk-steps li { position: relative; flex: 1; min-width: 0; }
+.walk-steps li:not(:last-child)::before { content: ""; position: absolute; top: 12px; left: 50%; width: 100%; border-top: 1px solid #cec8c1; }
+.walk-step, .walk-step:hover:not(:disabled) {
+  position: relative; width: 100%; display: flex; flex-direction: column; justify-content: flex-start;
+  gap: 5px; min-height: 48px; padding: 7px 0 4px; border: 0; border-radius: 0; background: transparent; color: #615953;
+  font-size: 12px; line-height: 1.45;
+}
+.walk-step:hover:not(:disabled) .walk-step-name { text-decoration: underline; text-underline-offset: 3px; }
+.walk-marker { width: 11px; height: 11px; border: 1.5px solid #898077; border-radius: 50%; background: white; }
+.walk-step.is-complete .walk-marker { border-color: var(--accent); background: var(--accent); }
+.walk-step[aria-current=step] .walk-marker { border: 3px solid var(--accent); outline: 1px solid #c9858c; outline-offset: 2px; }
+.walk-step[aria-current=step] .walk-step-name { color: var(--accent-strong); font-weight: 700; }
+.walk-detail { margin: 10px 0 16px; padding: 16px 18px; border-left: 3px solid var(--accent); background: #f6f4f1; overflow-wrap: anywhere; }
+#walk-step-title { margin: 0; font-size: 16px; line-height: 1.5; }
+#walk-description { margin-top: 4px; color: #4b453f; line-height: 1.6; }
+#walk-artifact { display: block; margin-top: 9px; color: #6e3435; font: 13px/1.6 var(--mono); }
+.walk-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.walk-controls button { min-height: 38px; padding: 7px 11px; border-radius: 2px; font-size: 13px; }
+#walk-play { color: white; border-color: #302c29; background: #302c29; gap: 8px; }
+#walk-play:hover { background: #514842; }
+.walk-play-icon { width: 12px; font-size: 11px; }
+#walk-progress { margin-right: auto; padding-inline: 5px; color: #655d56; font: 13px/1.5 var(--mono); }
+
+@media (max-width: 900px) {
+  .home-learn { grid-template-columns: minmax(0, 1fr); }
+  .home-components { padding: 0; }
+  .home-component-figure { max-width: 570px; margin-inline: auto; }
+  #home-walkthrough { margin-top: 24px; padding: 24px 0 0; border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 720px) {
+  .home-learn { --learn-inset: var(--gutter); width: 100%; padding-block: 23px; }
+  .home-component-figure { margin-top: 16px; }
+  #agent-diagram { width: calc(100% + 16px); margin-inline: -8px; }
+  .walk-step-name { overflow-wrap: anywhere; }
+}
+@media (max-width: 380px) {
+  .walk-controls { gap: 4px; }
+  .walk-controls button { padding-inline: 7px; }
+  #walk-progress { padding-inline: 2px; }
+}
 
 body:has(#connect-panel:not([hidden])) { --login-graphite: #202326; --login-paper: #fdfcfa; --login-gutter: clamp(32px, 5.2vw, 96px); background: var(--login-paper); }
 body:has(#connect-panel:not([hidden])) .topbar { border-bottom: 0; background: linear-gradient(to right, var(--login-graphite) 53%, var(--login-paper) 53%); }
@@ -313,7 +387,7 @@ button.primary:disabled { border-color: #b9adae; color: #4d4545; background: #e8
   #run-facts > :last-child:nth-child(odd) { grid-column: 1/-1; }
   .waterfall-axis, .waterfall-row { grid-template-columns: minmax(52px, 27%) minmax(34px, 1fr) minmax(52px, 21%); gap: 6px; }
   h1[tabindex], h2[tabindex] { scroll-margin-top: var(--s4); }
-  .home-panorama { height: clamp(168px, 29svh, 260px); }
+  .home-panorama { height: clamp(158px, 26svh, 235px); }
   .home-sheet { margin-top: -24px; padding: 23px 20px; }
   .home-intro { display: grid; gap: 15px; }
   #home-entry { justify-self: start; min-height: 44px; }

@@ -2,11 +2,13 @@
 
 from importlib.resources import files
 from unittest.mock import Mock
+from xml.etree import ElementTree
 
 from fastapi.testclient import TestClient
 
 from agentos.api.app import TaskStore, create_app
 from agentos.governance.auth import Authenticator
+from agentos.observability.page import console_html
 
 
 def test_ac013_public_root_redirects_to_uncached_home():
@@ -21,6 +23,16 @@ def test_ac013_public_root_redirects_to_uncached_home():
             assert home.headers["cache-control"] == "no-store"
             assert "img-src 'self'" in home.headers["content-security-policy"]
     assert not store.mock_calls
+
+
+def test_ac013_home_diagram_and_accessible_description_ship_in_shell():
+    svg = files("agentos.observability").joinpath("agent-components.svg").read_text(encoding="utf-8")
+    root = ElementTree.fromstring(svg)
+    assert root.get("id") == "agent-diagram" and root.get("role") == "img"
+    assert root.findtext("{*}title") and root.findtext("{*}desc")
+    modules = [element.attrib["data-module"] for element in root.iter() if "data-module" in element.attrib]
+    assert sorted(modules) == ["context", "model", "runtime", "skill", "tool", "trace"]
+    assert svg.strip() in console_html()
 
 
 def test_ac013_public_image_has_conditional_cache_and_exact_path():

@@ -25,7 +25,10 @@ agentos = "agentos.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"agentos.observability" = ["dashboard.html", "console.css", "components.js", "console.js", "architecture.webp"]
+"agentos.observability" = [
+    "dashboard.html", "console.css", "components.js", "console.js", "walkthrough.js",
+    "architecture.webp", "agent-components.svg",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

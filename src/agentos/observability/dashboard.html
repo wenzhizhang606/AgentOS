@@ -36,6 +36,45 @@
         <a href="/console#resources"><strong>资源管理<span aria-hidden="true">↗</span></strong><span>查找已发布的 Skill 与 Tool</span></a>
       </nav>
     </div>
+    <div class="home-learn">
+      <section class="home-components" aria-labelledby="home-components-heading">
+        <header class="home-section-heading">
+          <h2 id="home-components-heading">Agent 的组成</h2>
+          <p>以一次知识问答为例，看各个组件如何协作。</p>
+        </header>
+        <figure class="home-component-figure">
+          <!-- agent components figure -->
+          <figcaption>上下文快照记录这次回答用到了哪些资料，以及每条资料的版本和位置。</figcaption>
+        </figure>
+      </section>
+      <section id="home-walkthrough" aria-labelledby="walkthrough-heading">
+        <header class="home-section-heading">
+          <h2 id="walkthrough-heading">运行示例</h2>
+          <p>在浏览器中播放模拟任务，观察每一步用到的组件。</p>
+        </header>
+        <div class="walk-scenes" role="group" aria-label="选择示例场景">
+          <button type="button" data-scene="returns" aria-pressed="true">退货期限</button>
+          <button type="button" data-scene="invoice" aria-pressed="false">发票补开</button>
+        </div>
+        <div class="walk-question">
+          <span class="walk-label">用户提问</span>
+          <p id="walk-question"></p>
+        </div>
+        <ol id="walk-steps" class="walk-steps" aria-label="查看运行步骤"></ol>
+        <div class="walk-detail" aria-live="polite" aria-atomic="true">
+          <h3 id="walk-step-title"></h3>
+          <p id="walk-description"></p>
+          <samp id="walk-artifact"></samp>
+        </div>
+        <div class="walk-controls" role="group" aria-label="示例播放控制">
+          <button type="button" id="walk-play"><span class="walk-play-icon" aria-hidden="true">▶</span><span class="walk-play-text">播放</span></button>
+          <span id="walk-progress"></span>
+          <button type="button" id="walk-prev" disabled>上一步</button>
+          <button type="button" id="walk-next">下一步</button>
+        </div>
+        <noscript>退货期限示例中，Agent 加载 Skill、检索退货政策、组装上下文，再由模型生成带引用的回答。发票补开示例在检索不到依据时停止。启用 JavaScript 可逐步查看。</noscript>
+      </section>
+    </div>
   </section>
   <section id="connect-panel" aria-labelledby="connect-heading" hidden>
     <div class="login-identity">

@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" id="agent-diagram" viewBox="0 0 540 356"
+     width="540" height="356" role="img" aria-labelledby="agent-diagram-title agent-diagram-desc"
+     lang="zh-CN" font-family="'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">
+  <title id="agent-diagram-title">知识问答 Agent 的组成</title>
+  <desc id="agent-diagram-desc">在 Agent 运行时内，Skill 提供回答格式，Tool 提供授权资料。上下文服务组合用户问题、指引和证据，生成输入快照。运行时通过模型网关获取回答。运行轨迹记录步骤、调用和耗时。</desc>
+
+  <rect width="540" height="356" fill="#f7f5f1"/>
+  <g fill="none" stroke="#c9c3bc" stroke-width="1.25">
+    <rect x="15" y="27" width="510" height="273" rx="6"/>
+    <path d="M15 49V33q0-6 6-6h13m472 0h13q6 0 6 6v16M15 282v12q0 6 6 6h13m472 0h13q6 0 6-6v-12" stroke="#999087" stroke-width="2"/>
+  </g>
+
+  <g data-module="runtime">
+    <rect class="diagram-surface" x="36" y="10" width="174" height="34" rx="4" fill="#f7f5f1" stroke="transparent"/>
+    <g fill="none" stroke="#842738" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8">
+      <rect x="46" y="19" width="15" height="15" rx="2"/>
+      <path d="M51 16v3m5-3v3m-5 15v3m5-3v3m-13-13h3m-3 5h3m15-5h3m-3 5h3"/>
+    </g>
+    <text x="73" y="34" fill="#392e2b" font-size="23" font-weight="650">Agent 运行时</text>
+  </g>
+
+  <g fill="none" stroke="#a59c94" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M139 114v17q0 6 6 6h75q6 0 6 6v10m-5-5 5 5 5-5"/>
+    <path d="M401 114v17q0 6-6 6h-75q-6 0-6 6v10m-5-5 5 5 5-5"/>
+    <path d="M270 214v23m-5-5 5 5 5-5"/>
+  </g>
+
+  <g data-module="skill">
+    <rect class="diagram-surface" x="38" y="51" width="202" height="63" rx="5" fill="#fffefa" stroke="#c9c3bc" stroke-width="1.4"/>
+    <g fill="none" stroke="#665851" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+      <path d="M53 72q7-3 13 1 6-4 13-1v16q-7-3-13 1-6-4-13-1Zm13 1v16"/>
+    </g>
+    <text x="91" y="78" fill="#332e2c" font-size="25" font-weight="650">Skill</text>
+    <text x="91" y="102" fill="#59524d" font-size="20">约定回答格式</text>
+  </g>
+  <g data-module="tool">
+    <rect class="diagram-surface" x="300" y="51" width="202" height="63" rx="5" fill="#fffefa" stroke="#c9c3bc" stroke-width="1.4"/>
+    <g fill="none" stroke="#665851" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+      <circle cx="328" cy="79" r="8.5"/><path d="m334.5 85.5 7 7"/>
+    </g>
+    <text x="353" y="78" fill="#332e2c" font-size="25" font-weight="650">Tool</text>
+    <text x="353" y="102" fill="#59524d" font-size="20">检索授权资料</text>
+  </g>
+
+  <g data-module="context">
+    <rect class="diagram-surface" x="98" y="155" width="344" height="60" rx="5" fill="#f9ecea" stroke="#a53443" stroke-width="1.6"/>
+    <g stroke="#9e293a" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+      <path d="m114 180 16-8 16 8-16 8Z" fill="#f5d1cd"/>
+      <path d="m114 186 16 8 16-8m-32 6 16 8 16-8" fill="none"/>
+    </g>
+    <text x="158" y="181" fill="#872334" font-size="25" font-weight="700">上下文服务</text>
+    <text x="158" y="205" fill="#6a4141" font-size="20">选择证据、组装模型输入</text>
+  </g>
+  <g data-module="model">
+    <rect class="diagram-surface" x="131" y="239" width="278" height="49" rx="5" fill="#fffefa" stroke="#c9c3bc" stroke-width="1.4"/>
+    <g fill="none" stroke="#665851" stroke-linecap="round" stroke-linejoin="round" stroke-width="2">
+      <path d="M151 254h18q3 0 3 3v10q0 3-3 3h-9l-7 5v-5h-2q-3 0-3-3v-10q0-3 3-3Z"/>
+      <path d="M154 261h12m-12 4h8"/>
+    </g>
+    <text x="184" y="272" fill="#332e2c" font-size="24" font-weight="650">模型网关</text>
+    <text x="292" y="271" fill="#59524d" font-size="20">请求回答</text>
+  </g>
+
+  <g data-module="trace">
+    <rect class="diagram-surface" x="15" y="311" width="510" height="39" rx="4" fill="#efede8" stroke="transparent"/>
+    <g fill="none" stroke="#746c65" stroke-linecap="round" stroke-width="1.8">
+      <path d="M31 323v14m0-11h7m-7 9h14"/>
+      <circle cx="40" cy="326" r="2.2" fill="#efede8"/><circle cx="47" cy="335" r="2.2" fill="#efede8"/>
+    </g>
+    <text x="61" y="338" fill="#473e39" font-size="21" font-weight="650">运行轨迹</text>
+    <path d="M157 321v18" stroke="#c5bfb7"/>
+    <text x="174" y="337" fill="#59524d" font-size="18">步骤 · 调用记录 · 耗时</text>
+  </g>
+</svg>
