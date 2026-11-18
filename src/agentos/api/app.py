@@ -1,7 +1,6 @@
 """HTTP ingress for the pinned, single-worker read-only support profile."""
 
 from datetime import datetime
-from importlib.resources import files
 import re
 from typing import Annotated, Literal, Protocol
 from uuid import uuid4
@@ -15,6 +14,7 @@ from starlette.exceptions import HTTPException
 
 from agentos.contracts.errors import PlatformError
 from agentos.governance.auth import Authenticator, Identity
+from agentos.observability.page import console_html
 
 
 PageCursor = Annotated[str | None, Query(min_length=1, max_length=1024)]
@@ -174,8 +174,7 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
     @app.api_route("/resources", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
     @app.api_route("/monitor", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
     def dashboard():
-        page = files("agentos.observability").joinpath("dashboard.html").read_text(encoding="utf-8")
-        return HTMLResponse(page, headers={
+        return HTMLResponse(console_html(), headers={
             "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; "
                                        "style-src 'unsafe-inline'; connect-src 'self'; "
                                        "frame-ancestors 'none'; base-uri 'none'; form-action 'none'",

@@ -5,277 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>AgentOS 控制台</title>
-  <style>
-    :root {
-      color-scheme: light;
-      --ink: #202128;
-      --muted: #575b67;
-      --line: #dfe0e5;
-      --paper: #fff;
-      --page: #f6f6f8;
-      --accent: #b7162f;
-      --tint: #fdeef1;
-      --chart-success: #446187;
-      --chart-running: #626bb2;
-      --chart-queued: #ad793e;
-      --chart-fail: #b4223a;
-      --chart-timeout: #ac5729;
-      --chart-cancel: #8591a2;
-      --chart-tool: #555f75;
-      --chart-skill: #a46d8c;
-      --chart-model: #be1832;
-      --mono: "IBM Plex Mono", "Cascadia Code", Consolas, monospace;
-    }
-    * { box-sizing: border-box; }
-    [hidden] { display: none !important; }
-    body { margin: 0; color: var(--ink); background: var(--page); font: 14px/1.55 Inter, "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif; }
-    h1, h2, h3, p, dl, dd, figure { margin: 0; }
-    h1 { font-size: clamp(28px, 3vw, 40px); font-weight: 720; line-height: 1.15; letter-spacing: -.045em; }
-    h2 { font-size: 17px; font-weight: 700; line-height: 1.4; letter-spacing: -.025em; }
-    h3 { font-size: 15px; font-weight: 650; }
-    h2[tabindex] { scroll-margin-top: 78px; }
-    button, input, select { font: inherit; }
-    button, input:not([type=checkbox]), select { min-height: 36px; min-width: 0; border: 1px solid #c8c9d0; border-radius: 7px; color: var(--ink); background: white; }
-    button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 12px; cursor: pointer; font-weight: 550; }
-    button:hover:not(:disabled) { background: #fcf0f2; color: #98152a; border-color: #d29099; }
-    button:disabled { color: #777a85; background: #f2f2f5; cursor: default; }
-    :focus-visible { outline: 3px solid #9b2947; outline-offset: 3px; }
-    input:not([type=checkbox]), select { padding: 6px 10px; }
-    input::placeholder { color: #757885; }
-    input[type=checkbox] { margin: 0; width: 15px; height: 15px; accent-color: var(--accent); }
-    label { display: grid; gap: 6px; font-weight: 600; }
-    label input:not([type=checkbox]), label select { width: 100%; font-weight: 450; }
-    .icon { width: 17px; height: 17px; flex: none; vertical-align: middle; }
-    .topbar { position: sticky; top: 0; z-index: 5; background: white; color: #202128; border-bottom: 1px solid var(--line); }
-    .top-inner { width: min(100%, 1504px); min-height: 64px; margin: auto; padding: 0 clamp(16px, 4vw, 64px); display: flex; align-items: center; gap: 18px; }
-    .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 25px; font-weight: 740; letter-spacing: -.065em; line-height: 1; }
-    .brand-mark { width: 33px; height: 33px; color: white; background: #bf1732; border-radius: 5px; display: grid; place-items: center; }
-    .brand-mark .icon { width: 22px; height: 22px; }
-    .product-name { padding-left: 17px; border-left: 1px solid #d3d4db; color: #4f5260; font-weight: 540; letter-spacing: .04em; }
-    .connection-state { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; color: #626674; font-size: 12px; white-space: nowrap; }
-    .connection-state::before, .status-chip::before { content: ""; flex: none; display: inline-block; width: 6px; height: 6px; border-radius: 100%; background: currentColor; }
-    .connection-state { padding: 4px 9px; border: 1px solid var(--line); border-radius: 4px; }
-    .connection-state[data-active=true]::before { background: var(--chart-success); }
-    .console { margin: 0 auto; }
-    .sidebar { background: white; border-bottom: 1px solid var(--line); }
-    .workspace-nav, main { width: min(100%, 1504px); margin: auto; padding-inline: clamp(16px, 4vw, 64px); }
-    .workspace-nav, #views { display: flex; gap: 29px; align-items: center; }
-    .nav-item { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 49px; border: 0; border-radius: 0; padding: 0 2px; background: transparent; color: #555863; font-size: 13px; }
-    .nav-item[aria-pressed=true] { color: #b7162f; font-weight: 700; }
-    .nav-item[aria-pressed=true]::after { content: ""; position: absolute; inset: auto 0 -1px; height: 3px; background: var(--accent); }
-    #connect-nav { display: none; }
-    body:has(#connect-panel:not([hidden])) .sidebar { display: none; }
-    main { min-width: 0; padding-top: 25px; padding-bottom: 56px; }
-    .page-header { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px 24px; margin-bottom: 13px; }
-    .breadcrumb { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
-    .breadcrumb .icon { width: 13px; height: 13px; }
-    .breadcrumb span { color: #777b86; }
-    .toolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
-    .toolbar label { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 12px; white-space: nowrap; }
-    .toolbar label select { width: auto; }
-    .toolbar button, .toolbar select { font-size: 12px; min-height: 33px; }
-    #disconnect { color: #5e606b; }
-    #project-chip { padding: 4px 9px; border: 1px solid #d9dbe2; color: #45495a; border-radius: 5px; background: #f3f4f7; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-    #project-chip .icon { width: 14px; height: 14px; }
-    #connected-project { font-family: var(--mono); }
-    #status { margin: 7px 0; color: #555966; font-size: 12px; overflow-wrap: anywhere; }
-    #status:empty { margin: 0; }
-    section { min-width: 0; }
-    #report > section, #explorer > section, .chart-card { margin-top: 16px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); padding: 20px 23px; }
-    #report > .summary-panel { padding: 0; border: 0; border-radius: 0; background: transparent; }
-    .summary-scope { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 14px; margin: 5px 0 14px; }
-    .note, .meta { color: var(--muted); font-size: 12px; margin-top: 5px; overflow-wrap: anywhere; }
-    .summary-scope .note { margin: 0; }
-    .note:empty, .meta:empty { display: none; }
-    #scope { color: #555866; font-weight: 600; }
-    #metrics { display: grid; grid-template-columns: repeat(20,minmax(0,1fr)); gap: 0; }
-    #metrics > div { grid-column: span 4; min-width: 0; padding: 7px 10px 5px 0; }
-    dt { font-size: 12px; color: var(--muted); }
-    dd { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-    #metrics dd { font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: -.04em; }
-    #metrics > div:nth-child(-n+4) { grid-column: span 5; position: relative; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 15px 16px 14px; margin: 0 10px 10px 0; }
-    #metrics > div:nth-child(4) { margin-right: 0; }
-    #metrics > div:nth-child(-n+4) dd { margin-top: 5px; font-size: clamp(20px,2.2vw,32px); line-height: 1.25; }
-    #metrics > div:nth-child(-n+4) dt { color: #515461; }
-    #metrics > div:first-child { background: linear-gradient(125deg,#93132c,#bc1a38); border-color: #a81733; overflow: hidden; }
-    #metrics > div:first-child dt { color: #fff1f4; }
-    #metrics > div:first-child dd { color: white; }
-    #metrics > div:first-child::after { content: ""; position: absolute; inset: 0 0 0 55%; background: repeating-linear-gradient(127deg,transparent 0 12px,#ffffff15 12px 13px); clip-path: polygon(65% 0,100% 0,100% 100%,0 100%); }
-    .metric-toggle { display: none; }
-    .warning, .warning dd { color: #87521c; font-weight: 650; }
-    #overview-visuals { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    .chart-card h2 { margin-bottom: 12px; }
-    #status-chart { display: flex; gap: clamp(14px,2.5vw,38px); align-items: center; min-width: 0; }
-    .state-ring { display:block; width: clamp(106px,11vw,145px); height: auto; flex: none; }
-    .ring-number { font-family: var(--mono); font-size: 26px; font-weight: 650; letter-spacing: -.045em; fill: var(--ink); }
-    .ring-caption { font-size: 12px; fill: var(--muted); }
-    .chart-legend { flex: 1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 16px; padding: 0; margin: 0; list-style: none; }
-    .chart-legend li { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); min-width: 0; border-bottom: 1px solid #ececf0; padding-bottom: 3px; }
-    .chart-legend strong { margin-left: auto; color: var(--ink); font: 600 13px var(--mono); overflow-wrap:anywhere; }
-    .state-key { flex: none; width: 9px; height: 9px; }
-    #call-chart { display: grid; align-content: center; gap: 13px; }
-    .call-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 3px 10px; }
-    .call-label, .call-count { font-size: 12px; }
-    .call-count { text-align: right; font-family: var(--mono); }
-    .call-bar { grid-column: 1 / -1; width: 100%; height: 7px; border-radius: 8px; display:block; overflow:hidden; }
-    .scroll { margin-top: 12px; overflow-x: auto; border: 1px solid var(--line); border-radius: 7px; }
-    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; font-variant-numeric: tabular-nums; }
-    td, th { padding: 9px 12px; white-space: nowrap; vertical-align: top; border-bottom: 1px solid var(--line); }
-    th { color: #535763; background: #f6f6f8; font-size: 12px; font-weight: 650; }
-    tbody tr:last-child td { border-bottom: none; }
-    tbody tr:hover, tbody tr:focus-within, tbody tr.selected { background: #fcf2f4; }
-    .task-link, .run-button { min-height: auto; border: 0; border-radius: 2px; padding: 0; color: #9e1734; background: none; text-underline-offset: 3px; }
-    .task-link:hover, .run-button:hover { text-decoration: underline; }
-    .task-link, code { font-family: var(--mono); }
-    .details { max-width: 330px; min-width: 140px; white-space: normal; overflow-wrap: anywhere; }
-    .details small { display: block; color: var(--muted); }
-    .status-chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 99px; color: #565c6b; background: #f1f2f5; font-size: 12px; }
-    .status-chip[data-state=succeeded], .status-chip[data-state=final] { background: #eaf0f9; color: #3d5b85; }
-    .status-chip[data-state=running] { color: #504982; background: #f1eef8; }
-    .status-chip[data-state=pending], .status-chip[data-state=queued], .status-chip[data-state=timed_out] { color: #86510b; background: #fff1d5; }
-    .status-chip[data-state=failed] { color: #a13046; background: #ffedf0; }
-    .picker, .paging { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
-    .picker { margin-top: 12px; max-width: 850px; }
-    .picker label { flex: 1 1 230px; min-width: 0; }
-    .actions { margin-top: 12px; }
-    #trace-id code { padding: 3px 6px; border-radius: 4px; background: var(--tint); color: var(--accent); user-select: all; }
-    #run-facts { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; border-radius: 7px; border: 1px solid var(--line); overflow: hidden; margin: 14px 0; background: var(--line); }
-    #run-facts > div { background: #fbfbfc; min-width: 0; padding: 8px 11px; }
-    #run-facts dd { font-size: 13px; font-weight: 600; }
-    .events td:first-child { border-left: 3px solid #a5a7b2; }
-    .events tr[data-kind=context] td:first-child { border-left-color: #697993; }
-    .events tr[data-kind=tool] td:first-child { border-left-color: #646f89; }
-    .events tr[data-kind=skill] td:first-child { border-left-color: #a46d8c; }
-    .events tr[data-kind=model] td:first-child { border-left-color: #be1832; }
-    .events tr.failed td:first-child { border-left-color: #b4223a; }
-    .waterfall-panel { border: 1px solid #e2e2e8; border-radius: 8px; margin-top: 16px; padding: 13px 15px; background: #fdfdfe; }
-    .waterfall-note { font-size: 12px; margin: 3px 0 9px; color: var(--muted); }
-    .waterfall-axis, .waterfall-row { display: grid; grid-template-columns: minmax(110px,23%) minmax(48px,1fr) minmax(85px,16%); gap: 12px; align-items:center; }
-    .waterfall-axis { font: 11px/1.5 var(--mono); color:var(--muted); padding: 7px 0; }
-    .waterfall-axis-range { display:flex;justify-content:space-between; gap:3px; }
-    .waterfall-list { max-height: 380px; overflow-y:auto; }
-    .waterfall-row { min-height: 31px; border-top:1px solid #ececf0; font-size:12px; }
-    .waterfall-track { width:100%; height:17px; overflow:visible; color:#657186; }
-    .waterfall-row[data-kind=skill] .waterfall-track { color:#a46d8c; }
-    .waterfall-row[data-kind=tool] .waterfall-track { color:#555f75; }
-    .waterfall-row[data-kind=model] .waterfall-track { color:#be1832; }
-    .waterfall-row[data-kind=context] .waterfall-track { color:#65748b; }
-    .waterfall-row[data-outcome=open] .waterfall-track { color:#a16b33; }
-    .waterfall-row[data-outcome=failed] .waterfall-track { color:#b4223a; }
-    .waterfall-label, .waterfall-value { min-width: 0; overflow-wrap:anywhere; }
-    .waterfall-value { text-align:right; font-variant-numeric: tabular-nums; }
-    .trace-events-heading { margin-top:16px; }
-    body:has(#connect-panel:not([hidden])) { background: #f6f6f8; }
-    body:has(#connect-panel:not([hidden])) main { padding-block: clamp(40px,11vh,128px) 48px; }
-    body:has(#connect-panel:not([hidden])) .page-header { display: none; }
-    body:has(#connect-panel:not([hidden])) #status { width:min(100%,1090px); margin:10px auto; color:#a91932; }
-    .connect-card { display: grid; grid-template-columns: minmax(0,1.18fr) minmax(0,1fr); isolation:isolate; width: min(100%,1136px); min-height:480px; margin:0 auto; border: 1px solid #dedee4; border-radius: 8px; overflow: hidden; box-shadow: 0 18px 55px -38px #2923284a; background: white; }
-    .entry-art { position: relative; display:flex; flex-direction:column; min-width:0; padding:clamp(27px,3.6vw,56px); color:var(--ink); background: radial-gradient(ellipse at 65% 85%,#f5cdd4,transparent 54%),linear-gradient(139deg,#fffafa 0%,#f8ecef 64%,#edd4db 100%); overflow:hidden; }
-    .entry-art::before { content:""; position:absolute; inset:0; background:repeating-radial-gradient(ellipse at 115% 132%,transparent 0 29px,#ab4c6424 30px,transparent 31px); mask-image:linear-gradient(127deg,transparent 21%,black 92%); }
-    .entry-art > * { position:relative; }
-    .entry-art h1 { font-size: clamp(33px,3.75vw,57px); line-height:1.18; font-weight:720; margin:0 0 15px; color:#26272f; letter-spacing:-.055em; }
-    .entry-art h1::before { content:""; display:block; width:37px; height:4px; background:var(--accent); margin-bottom:23px; }
-    .entry-art p { color:#535562; font-size:15px; line-height:1.85; max-width:27em; }
-    .architecture-art { margin: 17px -8px -6px; flex:1; display:flex; flex-direction:column; justify-content:flex-end; }
-    .architecture-art svg { display:block; width:100%; max-height:247px; min-height:145px; }
-    .architecture-art figcaption { margin: 7px 0 0; display:flex; align-items:center; gap:8px; font-size:11px; color:#63525c; }
-    .architecture-art figcaption::before { content:""; width:15px; height:1px; background:#a5384b; }
-    .entry-form { align-self:center; padding:clamp(30px,4.1vw,64px); min-width:0; }
-    #connect-heading { font-size:clamp(25px,2.2vw,32px); letter-spacing:-.045em; }
-    .entry-form > .note { font-size:13px; margin-top:5px; }
-    .connect-fields { margin-top:26px; display:grid; gap:16px; }
-    .connect-fields label { font-size:13px; color:#373944; }
-    .field { display:flex; align-items:center; position:relative; }
-    .field > .icon { position:absolute; left:12px; color:#737785; pointer-events:none; }
-    .connect-fields input:not([type=checkbox]) { min-height:46px; padding-left:38px; border-color:#bbbcc7; border-radius:4px; }
-    .connect-fields input:focus { border-color:var(--accent); }
-    button.primary { color:white; border-color:#b1142e; border-radius:4px; background:#c31835; justify-content:center; gap:10px; padding:9px 15px; min-height:46px; margin-top:6px; }
-    button.primary:hover:not(:disabled) { color:white; border-color:#9f102b; background:#a30f2a; }
-    .session-note { display:flex; gap:7px; align-items:center; margin-top:18px; color:var(--muted); font-size:12px; }
-    .session-note .icon { width:14px; height:14px; }
-    @media (max-width:940px) {
-      .page-header { align-items:flex-start; }
-      .chart-legend { grid-template-columns:1fr; gap:3px; }
-      #run-facts { grid-template-columns:repeat(3,minmax(0,1fr)); }
-      .entry-form { padding:32px 27px; }
-    }
-    @media (max-width:730px) {
-      .top-inner { min-height:54px; gap:12px; } .product-name { padding-left:12px; }
-      .workspace-nav, #views { gap:20px; }
-      main { padding-top:19px; }
-      .page-header { display:block; } .toolbar { margin-top:13px; gap:7px 9px; }
-      #metrics { grid-template-columns:repeat(12,minmax(0,1fr)); }
-      #metrics > div { grid-column:span 4; }
-      #metrics > div:nth-child(-n+4) { grid-column:span 6; margin:0 7px 7px 0; padding:12px; }
-      #metrics > div:nth-child(even) { margin-right:0; }
-      #metrics > div:nth-child(-n+4) dd { font-size:23px; }
-      .metric-toggle { display: inline-flex; align-items: center; gap: 7px; margin: 5px 0 1px; font-size: 12px; color: var(--accent); cursor: pointer; }
-      .summary-panel:has(#show-more-metrics:not(:checked)) #metrics > div:nth-child(n+5) { display: none; }
-      #overview-visuals { gap:0; grid-template-columns:1fr; }
-      .chart-legend { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px; }
-      #report > section, #explorer > section, .chart-card { padding:15px; }
-      #report > .summary-panel { padding:0; }
-      .connect-card { grid-template-columns:1fr; max-width:560px; min-height:0; }
-      body:has(#connect-panel:not([hidden])) main { padding-block:22px 34px; }
-      .entry-art { min-height:142px; padding:22px 23px; justify-content:center; }
-      .entry-art h1 { font-size:29px; margin-bottom:7px; }
-      .entry-art h1::before { width:25px; height:3px; margin-bottom:13px; }
-      .entry-art p { font-size:12px; max-width:64%; }
-      .architecture-art { position:absolute; width:36%; max-width:164px; right:-5px; bottom:11px; margin:0; }
-      .architecture-art svg { min-height:0; height:auto; }
-      .architecture-art figcaption { display:none; }
-      .entry-form { padding:24px; }
-      .connect-fields { margin-top:17px; gap:12px; }
-      .session-note { margin-top:12px; }
-      #run-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
-      .waterfall-axis,.waterfall-row { grid-template-columns:minmax(70px,28%) minmax(42px,1fr) minmax(53px,20%); gap:6px; }
-      .waterfall-panel { padding:10px; }
-    }
-    @media (max-width:420px) {
-      .top-inner,main,.workspace-nav { padding-inline:13px; }
-      .brand { font-size:21px; } .product-name {font-size:12px;}
-      .chart-legend { gap:5px; }
-      #status-chart {gap:12px;} .state-ring {width:92px;}
-      #metrics > div { grid-column:span 6; }
-      .waterfall-row { font-size:11px; }
-      .entry-form {padding:21px;}
-      .toolbar #project-chip { max-width:100%; }
-    }
-    .catalog-numbers { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:18px 0; }
-    .catalog-numbers > div { padding:18px 22px; border:1px solid var(--line); border-radius:7px; background:white; }
-    .catalog-numbers dt { font-weight:660; color:var(--muted); }
-    .catalog-numbers dd { margin-top:5px; font:650 clamp(26px,3vw,40px)/1.3 var(--mono); }
-    .catalog-numbers > div:first-child { background:linear-gradient(112deg,#93132c,#b71936 75%,#c5334d); border-color:#a81733; color:white; }
-    .catalog-numbers > div:first-child dt { color:#fae5ea; }
-    .catalog-panel { padding:20px 23px; border-radius:7px; border:1px solid var(--line); background:white; }
-    .catalog-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:8px; }
-    .catalog-header label { display:flex; align-items:center; gap:8px; font-size:12px; white-space:nowrap; }
-    .catalog-header select { width:auto; min-width:80px; }
-    .catalog-release { overflow-wrap:anywhere; font-size:12px; }
-    #catalog-table .digest { font-family:var(--mono); white-space:normal; overflow-wrap:anywhere; }
-    #catalog-table .resource-name { font-family:var(--mono); font-weight:600; }
-    @media (max-width:540px) {
-      #views { gap:12px; flex-wrap:wrap; } #views button { font-size:12px; gap:4px; }
-      .catalog-numbers { gap:8px; } .catalog-numbers > div, .catalog-panel { padding:13px; }
-    }
-    @media (forced-colors:active) {
-      .connection-state::before,.state-key { border:1px solid CanvasText; }
-      .nav-item[aria-pressed=true] { border-bottom:2px solid Highlight; }
-      .call-bar,.state-ring,.waterfall-track { forced-color-adjust:none; }
-    }
-  </style>
+  <!-- console styles -->
 </head>
 <body>
 <header class="topbar">
   <div class="top-inner">
     <strong class="brand"><span class="brand-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2.5 15 6.2-9.4 6.3 9.4m-5.2 3.4L16 9l5.5 8.2M6.8 15h5.8"/></svg></span>AgentOS</strong>
     <span id="product-name" class="product-name">控制台</span>
+    <span id="project-chip" class="project-chip"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>项目 <strong id="connected-project"></strong></span>
     <span id="connection-state" class="connection-state">未连接</span>
+    <button type="button" id="disconnect">断开连接</button>
   </div>
 </header>
 <div class="console">
   <aside class="sidebar" aria-label="工作区">
     <div class="workspace-nav">
+      <p class="nav-heading">项目工作区</p>
       <span id="connect-nav">项目连接</span>
       <nav aria-label="控制台视图" id="views" hidden>
         <button type="button" class="nav-item" id="overview-view" aria-pressed="true" aria-controls="report"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>项目概览</button>
@@ -284,18 +29,16 @@
       </nav>
     </div>
   </aside>
-  <main>
+  <main id="main-content">
   <div class="page-header">
     <div>
       <p class="breadcrumb"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>工作区 <span aria-hidden="true">/</span> <b id="crumb-product">运行监控</b></p>
       <h1 id="page-title">运行监控</h1>
     </div>
     <div id="actions" class="toolbar" hidden>
-      <span id="project-chip"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>项目 <strong id="connected-project"></strong></span>
       <label>时间范围<select id="hours"><option value="1">过去 1 小时</option><option value="24" selected>过去 24 小时</option><option value="168">过去 7 天</option></select></label>
       <button type="button" id="refresh"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 5v5h-5M4 19v-5h5"/><path d="M6.2 8a7 7 0 0 1 11.5-2l2 3M4.3 15l2 3A7 7 0 0 0 18 16"/></svg>刷新</button>
       <label><input type="checkbox" id="automatic">每 30 秒刷新</label>
-      <button type="button" id="disconnect">断开连接</button>
     </div>
   </div>
   <section id="connect-panel" class="connect-card" aria-labelledby="connect-heading">
@@ -311,7 +54,7 @@
             <radialGradient id="ambient-glow"><stop stop-color="#a8304d" stop-opacity=".31"/><stop offset="1" stop-color="#d68095" stop-opacity="0"/></radialGradient>
           </defs>
           <ellipse cx="229" cy="169" rx="128" ry="40" fill="url(#ambient-glow)"/>
-          <g fill="none" stroke="#af6478" stroke-linejoin="round">
+          <g fill="none" stroke="#e9b0ba" stroke-linejoin="round">
             <path opacity=".22" stroke-dasharray="3 5" d="m54 138 168 79 167-79M66 85l155-74 154 74"/>
             <path d="m37 71 57 28 38-18 51 25m84-17 54-26 31 15 50-24m-119 91 29 14 32-15 51 24M51 179l38-19 33 16 49-24"/>
             <path opacity=".33" d="m39 77 55 26 38-18 32 16m124 48 24 12 32-15 35 17"/>
@@ -336,7 +79,7 @@
             <circle cx="37" cy="71" r="4"/><circle cx="402" cy="54" r="4"/><circle cx="395" cy="168" r="4"/><circle cx="51" cy="179" r="4"/>
             <circle cx="94" cy="99" r="2.8"/><circle cx="321" cy="63" r="2.8"/><circle cx="344" cy="144" r="2.8"/><circle cx="122" cy="176" r="2.8"/>
           </g>
-          <g font-family="Consolas,monospace" font-size="11" fill="#6d4d59">
+          <g font-family="Consolas,monospace" font-size="11" fill="#e9dce1">
             <text x="25" y="57">Context</text><text x="411" y="40" text-anchor="end">Model</text>
             <text x="40" y="200">Skill</text><text x="404" y="190" text-anchor="end">Tool</text>
           </g>
@@ -365,83 +108,101 @@
       <div class="catalog-header">
         <div><h2 id="catalog-heading">当前发布的资源</h2>
           <p class="meta catalog-release">发布版本 <code id="catalog-release"></code></p></div>
-        <label>资源类型<select id="resource-type"><option value="">全部</option><option value="skill">Skill</option><option value="tool">Tool</option></select></label>
       </div>
-      <div class="scroll"><table><thead><tr><th>资源名称</th><th>类型</th><th>版本</th><th>内容摘要（SHA-256）</th></tr></thead>
+      <div class="catalog-filters">
+        <label>资源名称<input type="search" id="resource-search" placeholder="搜索资源名称" spellcheck="false" aria-controls="catalog-table"></label>
+        <label>资源类型<select id="resource-type" aria-controls="catalog-table"><option value="">全部类型</option><option value="skill">Skill</option><option value="tool">Tool</option></select></label>
+        <button type="button" id="reset-resource-filter" class="quiet" disabled>清除筛选</button>
+      </div>
+      <p id="catalog-result" class="meta" role="status"></p>
+      <div class="scroll"><table aria-labelledby="catalog-heading"><thead><tr><th scope="col">资源名称</th><th scope="col">类型</th><th scope="col">版本</th><th scope="col">摘要简写</th></tr></thead>
         <tbody id="catalog-table"></tbody></table></div>
     </section>
+    <dialog id="resource-detail" class="resource-detail" aria-labelledby="resource-detail-title">
+      <div class="resource-detail-heading"><h2 id="resource-detail-title">资源详情</h2>
+        <button type="button" id="close-resource-detail" class="quiet" autofocus>关闭详情</button>
+      </div>
+      <dl id="resource-detail-facts" class="resource-facts"></dl>
+    </dialog>
   </div>
   <div id="report" hidden>
     <section class="summary-panel" aria-labelledby="summary-heading">
-      <h2 id="summary-heading">运行指标</h2>
+      <div class="section-heading"><h2 id="summary-heading">运行指标</h2>
+        <label class="metric-toggle"><input id="show-more-metrics" type="checkbox" aria-controls="metrics">显示更多运行指标</label>
+      </div>
       <div class="summary-scope"><p id="scope" class="note"></p><p id="window" class="note"></p></div>
-      <dl id="metrics"></dl>
-      <label class="metric-toggle"><input id="show-more-metrics" type="checkbox" aria-controls="metrics">显示更多运行指标</label>
+      <dl id="metrics" class="metric-grid"></dl>
     </section>
     <div id="overview-visuals">
-      <section class="chart-card" aria-labelledby="status-chart-heading">
+      <section class="panel chart-card" aria-labelledby="status-chart-heading">
         <h2 id="status-chart-heading">任务状态分布</h2>
         <div id="status-chart"></div>
       </section>
-      <section class="chart-card" aria-labelledby="call-chart-heading">
+      <section class="panel chart-card" aria-labelledby="call-chart-heading">
         <h2 id="call-chart-heading">组件调用量</h2>
         <div id="call-chart"></div>
       </section>
     </div>
-    <section aria-labelledby="tasks-heading">
+    <section class="panel" aria-labelledby="tasks-heading">
       <h2 id="tasks-heading">最近任务</h2><p id="task-count" class="note"></p>
       <div class="scroll">
-        <table><thead><tr><th>创建时间</th><th>任务 ID</th><th>状态</th><th>费用结算</th><th>错误码</th></tr></thead>
+        <table aria-labelledby="tasks-heading"><thead><tr><th scope="col">创建时间</th><th scope="col">任务 ID</th><th scope="col">状态</th><th scope="col">费用结算</th><th scope="col">错误码</th></tr></thead>
           <tbody id="tasks"></tbody></table>
       </div>
     </section>
-    <section id="detail" aria-labelledby="detail-heading" hidden>
+    <section class="panel detail-panel" id="detail" aria-labelledby="detail-heading" hidden>
       <h2 id="detail-heading" tabindex="-1">任务时间线</h2><p id="detail-meta" class="meta"></p>
       <p id="detail-status" class="note" role="status"></p>
       <div class="scroll">
-        <table class="events"><thead><tr><th>发生时间</th><th>类型</th><th>事件</th><th>尝试</th><th>来源 / 调用标识</th><th>耗时</th><th>错误码</th></tr></thead>
+        <table class="events" aria-labelledby="detail-heading"><thead><tr><th scope="col">发生时间</th><th scope="col">类型</th><th scope="col">事件</th><th scope="col">尝试</th><th scope="col">来源 / 调用标识</th><th scope="col">耗时</th><th scope="col">错误码</th></tr></thead>
           <tbody id="timeline"></tbody></table>
       </div>
     </section>
-    <section aria-labelledby="registered-heading">
+    <section class="panel" aria-labelledby="registered-heading">
       <h2 id="registered-heading">当前发布的 Skill 和 Tool</h2>
       <p class="meta" id="release"></p>
       <div class="scroll">
-        <table><thead><tr><th>类型</th><th>名称</th><th>版本</th><th>内容摘要</th></tr></thead>
+        <table aria-labelledby="registered-heading"><thead><tr><th scope="col">类型</th><th scope="col">名称</th><th scope="col">版本</th><th scope="col">内容摘要</th></tr></thead>
           <tbody id="registered"></tbody></table>
       </div>
     </section>
-    <section aria-labelledby="cap-heading">
+    <section class="panel" aria-labelledby="cap-heading">
       <h2 id="cap-heading">能力执行记录</h2><p class="note" id="cap-status"></p>
       <div class="scroll">
-        <table><thead><tr><th>类型</th><th>能力 / 版本</th><th>记录数</th><th>成功</th><th>失败</th><th>无结束记录</th><th>平均耗时</th><th>P95 耗时</th><th>最大耗时</th></tr></thead>
+        <table aria-labelledby="cap-heading"><thead><tr><th scope="col">类型</th><th scope="col">能力 / 版本</th><th scope="col">记录数</th><th scope="col">成功</th><th scope="col">失败</th><th scope="col">无结束记录</th><th scope="col">平均耗时</th><th scope="col">P95 耗时</th><th scope="col">最大耗时</th></tr></thead>
           <tbody id="capabilities"></tbody></table>
       </div>
     </section>
   </div>
   <div id="explorer" hidden>
-    <section aria-labelledby="agent-heading">
+    <section class="panel" aria-labelledby="agent-heading">
       <h2 id="agent-heading">选择 Agent</h2>
       <p id="agent-scope" class="note"></p>
-      <div class="picker">
-        <label>Agent 发布版本<select id="agent-version" disabled><option value="">选择发布版本</option></select></label>
-        <div class="paging" aria-label="发布版本分页">
-          <button type="button" id="agents-prev" disabled>上一页版本</button>
-          <button type="button" id="agents-next" disabled>下一页版本</button>
+      <div class="trace-filters">
+        <div class="filter-group">
+          <div class="picker">
+            <label>Agent 发布版本<select id="agent-version" disabled><option value="">选择发布版本</option></select></label>
+            <div class="paging" aria-label="发布版本分页">
+              <button type="button" id="agents-prev" disabled>上一页版本</button>
+              <button type="button" id="agents-next" disabled>下一页版本</button>
+            </div>
+          </div>
+          <p class="note" id="agent-note" role="status"></p>
+        </div>
+        <div class="filter-group">
+          <form id="find-run" class="picker" autocomplete="off">
+            <label>运行 ID<input id="run-id" required spellcheck="false" aria-describedby="run-id-hint" placeholder="任务 ID:尝试次数"></label>
+            <button type="submit" class="trace-submit">按 ID 查看轨迹</button>
+          </form>
+          <p id="run-id-hint" class="note">输入完整运行 ID 可查看时间范围以外的记录。</p>
         </div>
       </div>
-      <p class="note" id="agent-note" role="status"></p>
-      <form id="find-run" class="picker" autocomplete="off">
-        <label>运行 ID<input id="run-id" required spellcheck="false" aria-describedby="run-id-hint" placeholder="任务 ID:尝试次数"></label>
-        <button type="submit">按 ID 查看轨迹</button>
-      </form>
-      <p id="run-id-hint" class="note">输入完整运行 ID 可查看时间范围以外的记录。</p>
     </section>
-    <section id="run-list" aria-labelledby="runs-heading" hidden>
+    <section class="panel" id="run-list" aria-labelledby="runs-heading" hidden>
       <h2 id="runs-heading">运行实例</h2>
       <p class="meta" id="runs-release"></p>
-      <div class="scroll"><table>
-        <thead><tr><th>开始时间</th><th>任务 ID</th><th>执行尝试</th><th>状态</th><th>Worker</th></tr></thead>
+      <div class="scroll"><table aria-labelledby="runs-heading">
+        <thead><tr><th scope="col">开始时间</th><th scope="col">任务 ID</th><th scope="col">执行尝试</th><th scope="col">状态</th><th scope="col">Worker</th></tr></thead>
         <tbody id="instances"></tbody>
       </table></div>
       <div class="actions paging" aria-label="运行实例分页">
@@ -449,7 +210,7 @@
         <button type="button" id="instances-next" disabled>下一页实例</button>
       </div>
     </section>
-    <section id="run-detail" aria-labelledby="trace-heading" hidden>
+    <section class="panel detail-panel" id="run-detail" aria-labelledby="trace-heading" hidden>
       <h2 id="trace-heading" tabindex="-1">本次运行轨迹</h2>
       <p id="trace-id" class="meta"></p>
       <dl id="run-facts"></dl>
@@ -458,9 +219,9 @@
         <h3>调用瀑布图</h3>
         <div id="waterfall"></div>
       </div>
-      <h3 class="trace-events-heading">事件明细</h3>
-      <div class="scroll"><table class="events">
-        <thead><tr><th>发生时间</th><th>类型</th><th>事件</th><th>执行尝试</th><th>来源 / 调用标识</th><th>耗时</th><th>错误码</th></tr></thead>
+      <h3 class="trace-events-heading" id="trace-events-title">事件明细</h3>
+      <div class="scroll"><table class="events" aria-labelledby="trace-events-title">
+        <thead><tr><th scope="col">发生时间</th><th scope="col">类型</th><th scope="col">事件</th><th scope="col">执行尝试</th><th scope="col">来源 / 调用标识</th><th scope="col">耗时</th><th scope="col">错误码</th></tr></thead>
         <tbody id="trace"></tbody>
       </table></div>
       <div class="actions paging" aria-label="运行事件分页">
@@ -471,708 +232,6 @@
   </div>
   </main>
 </div>
-<script>
-"use strict";
-(() => {
-  const byId = id => document.getElementById(id);
-  const stateNames = {queued:"排队中", running:"运行中", succeeded:"成功", failed:"失败", cancelled:"已取消", timed_out:"已超时", superseded:"已被后续尝试接替"};
-  const accounting = {pending:"待结算", final:"已结算", no_dispatch:"无模型准入"};
-  const eventNames = {queued:"进入队列", claimed:"领取任务", started:"开始", succeeded:"完成", failed:"失败",
-    timed_out:"超时", cancelled:"取消", dispatch_admitted:"模型发送准入", receipt_settled:"费用结算"};
-  const kinds = {task:"任务", context:"上下文", skill:"Skill", tool:"Tool", model:"模型"};
-  let connection = null, selected = null, projectRead = null, taskRead = null, timer = null;
-  function initialView() {
-    if (location.pathname === "/resources" || location.hash === "#resources") return "resources";
-    return location.hash === "#runs" ? "runs" : "overview";
-  }
-  const viewUrl = name => "/console" + (name === "overview" ? "" : "#" + name);
-  let view = initialView(), agent = "", instance = null;
-  let inventory = [];
-  function pageState() { return {previous:[], cursor:null, next:null}; }
-  let agentPage = pageState(), runPage = pageState(), tracePage = pageState();
-  const date = value => value ? new Date(value).toLocaleString("zh-CN", {hour12:false}) : "—";
-  const eventTime = value => value ? date(value) + (value.match(/\.\d+(?=Z$)/)?.[0] ?? "") : "—";
-  function elapsedMs(start, end) {
-    if (!start || !end) return null;
-    // Date.parse retains milliseconds. The DB also records the next three fractional digits.
-    const subMillis = value => Number((value.split(".")[1] || "").replace(/Z$/, "").padEnd(6, "0").slice(3, 6));
-    return (1000 * (Date.parse(end) - Date.parse(start)) + subMillis(end) - subMillis(start)) / 1000;
-  }
-  const ms = value => value == null ? "—" : value + " ms";
-  function money(micros) {
-    const digits = String(micros ?? "");
-    if (!/^\d+$/.test(digits)) return "—";
-    const padded = digits.padStart(7, "0");
-    return "¥" + padded.slice(0, -6) + "." + padded.slice(-6);
-  }
-  function el(tag, value) {
-    const node = document.createElement(tag);
-    node.textContent = value == null ? "—" : String(value);
-    return node;
-  }
-  function cell(row, value, css) {
-    const td = el("td", value);
-    if (css) td.className = css;
-    row.append(td);
-    return td;
-  }
-  function stateCell(row, state, labels) {
-    const chip = el("span", labels[state] || state);
-    chip.className = "status-chip";
-    chip.dataset.state = state;
-    cell(row, "").append(chip);
-  }
-  function empty(tbody, count, message) {
-    const row = el("tr", "");
-    cell(row, message, "note").colSpan = count;
-    tbody.append(row);
-  }
-  function schedule() {
-    clearTimeout(timer);
-    if (connection && byId("automatic").checked && !document.hidden) {
-      timer = setTimeout(refresh, 30000);
-    }
-  }
-  function clearDetail() {
-    taskRead?.abort(); taskRead = null; selected = null;
-    byId("detail").hidden = true;
-    for (const id of ["timeline","detail-meta","detail-status"]) byId(id).replaceChildren();
-  }
-  function clearProject() {
-    clearDetail();
-    clearInventory();
-    resetExplorer();
-    byId("report").hidden = true;
-    for (const id of ["metrics","status-chart","call-chart","capabilities","tasks","scope","window","task-count","registered","release","cap-status"]) byId(id).replaceChildren();
-  }
-  function showConnection() {
-    const open = connection !== null;
-    for (const id of ["connect-panel", "connect-nav"]) byId(id).hidden = open;
-    for (const id of ["actions", "views"]) byId(id).hidden = !open;
-    byId("connected-project").textContent = connection?.project ?? "";
-    byId("connection-state").textContent = open ? "连接中" : "未连接";
-    byId("connection-state").dataset.active = "false";
-    setViewButtons();
-  }
-  function showConnected() {
-    byId("connection-state").textContent = "已连接";
-    byId("connection-state").dataset.active = "true";
-  }
-  function disconnect() {
-    clearTimeout(timer);
-    projectRead?.abort(); projectRead = null; connection = null;
-    clearProject();
-    view = initialView();
-    showConnection();
-    byId("automatic").checked = false;
-    byId("token").value = "";
-    byId("status").textContent = "";
-  }
-  function setViewButtons() {
-    const resources = view === "resources";
-    byId("overview-view").setAttribute("aria-pressed", String(view === "overview"));
-    byId("runs-view").setAttribute("aria-pressed", String(view === "runs"));
-    byId("resources-view").setAttribute("aria-pressed", String(resources));
-    const name = resources ? "资源管理" : view === "runs" ? "Agent 运行轨迹" : "项目概览";
-    byId("page-title").textContent = connection ? name : "AgentOS 控制台";
-    byId("hours").closest("label").hidden = resources;
-    byId("crumb-product").textContent = name;
-    document.title = connection ? name + " · AgentOS 控制台" : "AgentOS 控制台";
-  }
-  function clearTrace() {
-    byId("run-detail").hidden = true;
-    for (const id of ["trace-id","run-facts","trace","trace-note","waterfall"]) byId(id).replaceChildren();
-  }
-  function chooseRun(run) {
-    instance = run;
-    tracePage = pageState();
-    for (const row of byId("instances").rows) row.classList.toggle("selected", row.dataset.run === run?.run_id);
-    clearTrace();
-  }
-  function clearRuns() {
-    byId("run-list").hidden = true;
-    byId("instances").replaceChildren();
-    byId("runs-release").replaceChildren();
-    clearTrace();
-  }
-  function resetExplorer() {
-    agentPage = pageState(); runPage = pageState(); tracePage = pageState(); agent = ""; instance = null;
-    byId("run-id").value = "";
-    byId("agent-version").replaceChildren();
-    byId("agent-version").disabled = true;
-    for (const id of ["agent-scope","agent-note"]) byId(id).replaceChildren();
-    for (const id of ["agents-prev","agents-next","instances-prev","instances-next","events-prev","events-next"]) byId(id).disabled = true;
-    byId("explorer").hidden = true;
-    clearRuns();
-  }
-  async function read(path, signal) {
-    const response = await fetch(path, {method:"GET", cache:"no-store", redirect:"error",
-      credentials:"omit", mode:"same-origin", referrerPolicy:"no-referrer", signal,
-      headers:{"Accept":"application/json","Authorization":"Bearer " + connection.token}});
-    if (!response.ok) {
-      const error = new Error("读取失败（HTTP " + response.status + "）");
-      error.status = response.status;
-      throw error;
-    }
-    return response.json();
-  }
-  function chartSvg(tag, attributes) {
-    const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value));
-    return element;
-  }
-  function countOf(value) {
-    return /^\d+$/.test(String(value)) ? BigInt(value) : null;
-  }
-  function share(value, total) {
-    return total > 0n && value != null ? Number(value * 1000000n / total) / 10000 : 0;
-  }
-  function renderStatusChart(s) {
-    const states = [["succeeded","var(--chart-success, #446187)"],["running","var(--chart-running, #626bb2)"],
-      ["queued","var(--chart-queued, #ad793e)"],["failed","var(--chart-fail, #b4223a)"],
-      ["timed_out","var(--chart-timeout, #ac5729)"],["cancelled","var(--chart-cancel, #8591a2)"]];
-    const ring = chartSvg("svg", {viewBox:"0 0 148 148", class:"state-ring", "aria-hidden":"true"});
-    const circle = {cx:74, cy:74, r:60, fill:"none", "stroke-width":13};
-    ring.append(chartSvg("circle", {...circle, class:"ring-track", stroke:"#e8edf1"}));
-    const legend = el("ul", "");
-    legend.className = "chart-legend";
-    const total = countOf(s.tasks);
-    let offset = 0;
-    for (const [state, color] of states) {
-      const value = countOf(s[state]);
-      const percent = share(value, total);
-      if (percent > 0) {
-        ring.append(chartSvg("circle", {...circle, class:"ring-segment", "data-state":state, stroke:color,
-          pathLength:100, transform:"rotate(-90 74 74)", "stroke-dasharray":[percent, 100 - percent].join(" "),
-          "stroke-dashoffset":-offset}));
-        offset += percent;
-      }
-      const item = el("li", "");
-      item.dataset.state = state;
-      const swatch = chartSvg("svg", {class:"state-key", "data-state":state, width:9, height:9, "aria-hidden":"true"});
-      swatch.append(chartSvg("circle", {cx:4.5, cy:4.5, r:4, fill:color}));
-      const name = el("span", stateNames[state]);
-      name.className = "state-label";
-      item.append(swatch, name, el("strong", value));
-      legend.append(item);
-    }
-    const number = chartSvg("text", {x:74, y:74, "text-anchor":"middle", class:"ring-number"});
-    const exact = String(total ?? "—");
-    // Keep long counts inside the ring; the metrics above retain the exact figure.
-    number.textContent = exact.length > 5 ? new Intl.NumberFormat("zh-CN", {notation:"compact"}).format(total) : exact;
-    const caption = chartSvg("text", {x:74, y:94, "text-anchor":"middle", class:"ring-caption"});
-    caption.textContent = "任务总数";
-    ring.append(number, caption);
-    byId("status-chart").replaceChildren(ring, legend);
-  }
-  function renderCallChart(s) {
-    const calls = [["tool","Tool 执行",countOf(s.tool_calls),"var(--chart-tool, #555f75)"],
-      ["skill","Skill 加载",countOf(s.skill_calls),"var(--chart-skill, #a46d8c)"],
-      ["model","模型准入",countOf(s.dispatches),"var(--chart-model, #be1832)"]];
-    const maximum = calls.reduce((max, item) => item[2] != null && item[2] > max ? item[2] : max, 0n);
-    const chart = byId("call-chart");
-    chart.replaceChildren();
-    for (const [kind, label, count, color] of calls) {
-      const row = el("div", "");
-      row.className = "call-row";
-      row.dataset.kind = kind;
-      const name = el("span", label);
-      name.className = "call-label";
-      const amount = el("strong", count);
-      amount.className = "call-count";
-      const bar = chartSvg("svg", {class:"call-bar", width:"100%", height:6, "aria-hidden":"true"});
-      bar.append(chartSvg("rect", {x:0, y:0, width:"100%", height:6, rx:3, fill:"#e9edf2"}),
-        chartSvg("rect", {x:0, y:0, width:share(count, maximum) + "%", height:6, rx:3, fill:color}));
-      row.append(name, amount, bar);
-      chart.append(row);
-    }
-  }
-  function renderSummary(data) {
-    const s = data.summary;
-    byId("scope").textContent = data.scope === "project" ? "全项目可见任务" : "当前主体可见任务";
-    byId("window").textContent = "任务创建时间 " + date(data.window_start) + " 至 " + date(data.window_end) +
-      "（本地时间） · 状态、费用取本次读取值";
-    const metrics = byId("metrics");
-    metrics.replaceChildren();
-    for (const [name, value] of [
-      ["任务数",s.tasks],["Skill 调用总数",s.skill_calls],["Tool 调用总数",s.tool_calls],
-      ["已结算费用",money(s.settled_micros)],["成功 / 失败",[s.succeeded,s.failed].join(" / ")],
-      ["排队 / 运行",[s.queued,s.running].join(" / ")],["取消 / 超时",[s.cancelled,s.timed_out].join(" / ")],
-      ["有能力记录的任务",s.tasks_with_spans],
-      ["模型准入次数",s.dispatches],["含用量的结算记录",s.usage_receipts],["待结算调用",s.pending_receipts],
-      ["预留费用",money(s.reserved_micros)],
-      ["已知输入 Token",s.input_tokens],["已知输出 Token",s.output_tokens]
-    ]) {
-      const block = el("div", "");
-      block.append(el("dt", name), el("dd", value));
-      if (name === "待结算调用" && Number(value) > 0) block.className = "warning";
-      metrics.append(block);
-    }
-    renderStatusChart(s);
-    renderCallChart(s);
-    const capabilities = byId("capabilities");
-    capabilities.replaceChildren();
-    byId("release").textContent = "发布版本 " + data.active_release.version_id;
-    const registered = byId("registered");
-    registered.replaceChildren();
-    for (const c of data.active_release.capabilities) {
-      const row = el("tr", "");
-      cell(row, c.kind); cell(row, c.name); cell(row, c.version); cell(row, c.digest, "details");
-      registered.append(row);
-    }
-    if (!registered.rows.length) empty(registered, 4, "当前版本未配置 Skill 或 Tool。");
-    byId("cap-status").textContent = data.capabilities_truncated
-      ? "按窗口内调用量显示前 " + data.capabilities.length + " 组。" : "";
-    for (const c of data.capabilities) {
-      const row = el("tr", "");
-      cell(row, c.kind);
-      const identity = cell(row, c.name, "details");
-      identity.append(el("small", c.version), el("small", c.digest));
-      cell(row, c.calls); cell(row, c.succeeded); cell(row, c.failed, c.failed > 0 ? "warning" : "");
-      cell(row, c.unfinished); cell(row, ms(c.avg_duration_ms)); cell(row, ms(c.p95_duration_ms)); cell(row, ms(c.max_duration_ms));
-      capabilities.append(row);
-    }
-    if (!data.capabilities.length) empty(capabilities, 9, "该范围内暂无能力执行记录。");
-    byId("task-count").textContent = "显示 " + data.recent_tasks.length + " 项，选择任务 ID 查看事件。";
-    const tasks = byId("tasks");
-    tasks.replaceChildren();
-    for (const t of data.recent_tasks) {
-      const row = el("tr", "");
-      row.dataset.task = t.task_id;
-      row.classList.toggle("selected", selected === t.task_id);
-      cell(row, date(t.created_at));
-      const button = el("button", t.task_id);
-      button.type = "button"; button.className = "task-link";
-      button.addEventListener("click", () => showTask(t.task_id, true));
-      cell(row, "").append(button);
-      stateCell(row, t.state, stateNames);
-      stateCell(row, t.accounting_state, accounting);
-      cell(row, t.error_code, t.error_code ? "warning" : "");
-      tasks.append(row);
-    }
-    if (!data.recent_tasks.length) empty(tasks, 5, "该时间范围内没有可见任务。");
-    byId("report").hidden = false;
-  }
-  function clearInventory() {
-    inventory = [];
-    byId("resources").hidden = true;
-    for (const id of ["skill-inventory","tool-inventory","catalog-table","catalog-release"]) byId(id).replaceChildren();
-  }
-  function renderResourceTable() {
-    const table = byId("catalog-table");
-    table.replaceChildren();
-    const kind = byId("resource-type").value;
-    for (const item of inventory) {
-      if (kind && kind !== item.kind) continue;
-      const row = el("tr", "");
-      cell(row, item.name, "resource-name"); cell(row, kinds[item.kind]); cell(row, item.version);
-      cell(row, item.digest, "digest");
-      table.append(row);
-    }
-    if (!table.rows.length) empty(table, 4, "当前发布没有此类型的资源。");
-  }
-  function renderInventory(data) {
-    byId("skill-inventory").textContent = data.counts.skill;
-    byId("tool-inventory").textContent = data.counts.tool;
-    byId("catalog-release").textContent = data.agent_version_id;
-    inventory = data.resources;
-    renderResourceTable();
-    byId("resources").hidden = false;
-  }
-  async function refresh() {
-    if (!connection) return;
-    if (view === "runs") return loadExplorer("agents");
-    clearTimeout(timer);
-    projectRead?.abort();
-    const request = projectRead = new AbortController();
-    byId("status").textContent = "正在读取项目…";
-    try {
-      const resourceView = view === "resources";
-      const path = resourceView ? "/resources" : "/monitoring?hours=" + encodeURIComponent(byId("hours").value);
-      const data = await read("/v1/projects/" + encodeURIComponent(connection.project) + path, request.signal);
-      if (request.signal.aborted) return;
-      if (data.project_id !== connection.project) throw new Error("project");
-      if (resourceView) renderInventory(data);
-      else renderSummary(data);
-      showConnected();
-      byId("status").textContent = "更新于 " + date(Date.now());
-      if (selected) await showTask(selected, false);
-    } catch (error) {
-      if (request.signal.aborted) return;
-      clearProject();
-      if (error.status === 401 || error.status === 403 || byId("connection-state").dataset.active !== "true") disconnect();
-      byId("status").textContent = error.status ? error.message : "无法读取监控数据，请检查连接后重试。";
-    } finally {
-      if (projectRead === request) { projectRead = null; schedule(); }
-    }
-  }
-  function query(page) {
-    const params = new URLSearchParams({hours:byId("hours").value, limit:"25"});
-    if (page.cursor) params.set("cursor", page.cursor);
-    return "?" + params;
-  }
-  function setPaging(prefix, page, next) {
-    page.next = next || null;
-    byId(prefix + "-prev").disabled = !page.previous.length;
-    byId(prefix + "-next").disabled = !page.next;
-  }
-  function changePage(which, forward) {
-    const pages = {agents:agentPage, runs:runPage, trace:tracePage};
-    const page = pages[which];
-    if (forward) {
-      if (!page.next) return;
-      page.previous.push(page.cursor); page.cursor = page.next;
-    } else {
-      if (!page.previous.length) return;
-      page.cursor = page.previous.pop();
-    }
-    page.next = null;
-    if (which === "trace") {
-      clearTrace();
-      loadExplorer("trace", true);
-      return;
-    }
-    if (which === "agents") {
-      agent = ""; runPage = pageState();
-      byId("agent-version").disabled = true;
-      byId("agent-version").replaceChildren();
-    }
-    instance = null;
-    byId("run-id").value = "";
-    clearRuns();
-    loadExplorer(which);
-  }
-  function renderAgents(data) {
-    const chooser = byId("agent-version");
-    chooser.replaceChildren(new Option("选择发布版本", ""));
-    for (const a of data.agents) {
-      const label = [a.profile, a.agent_version_id, a.run_count + " 次运行"].filter(Boolean).join(" · ");
-      chooser.add(new Option(label, a.agent_version_id));
-    }
-    if (agent && !data.agents.some(a => a.agent_version_id === agent)) {
-      // The selected release can move off a refreshed page. Its runs are reauthorized below.
-      chooser.add(new Option(agent + "（已选版本）", agent));
-    }
-    chooser.value = agent;
-    chooser.disabled = chooser.options.length <= 1;
-    byId("agent-scope").textContent = (data.scope === "project" ? "全项目可见运行" : "当前主体可见运行") + " · 运行开始时间 " +
-      date(data.window_start) + " 至 " + date(data.window_end);
-    byId("agent-note").textContent = data.agents.length ? "" : "这个时间范围内没有可见运行。";
-    setPaging("agents", agentPage, data.next_cursor);
-  }
-  function renderRuns(data) {
-    byId("run-list").hidden = false;
-    byId("runs-release").textContent = "发布版本 " + data.agent_version_id;
-    const table = byId("instances");
-    table.replaceChildren();
-    for (const r of data.runs) {
-      const row = el("tr", "");
-      row.dataset.run = r.run_id;
-      row.classList.toggle("selected", instance?.run_id === r.run_id);
-      cell(row, date(r.started_at)); cell(row, r.task_id);
-      const attempt = r.run_id.slice(r.task_id.length + 1);
-      const button = el("button", "第 " + attempt + " 次");
-      button.type = "button"; button.className = "run-button";
-      button.setAttribute("aria-label", "查看任务 " + r.task_id + " 第 " + attempt + " 次运行");
-      button.addEventListener("click", () => {
-        byId("run-id").value = r.run_id;
-        chooseRun({task_id:r.task_id, run_id:r.run_id, attempt});
-        loadExplorer("trace", true);
-      });
-      cell(row, "").append(button);
-      stateCell(row, r.state, stateNames);
-      cell(row, r.worker_id, "details");
-      table.append(row);
-    }
-    if (!table.rows.length) empty(table, 5, "此页没有可见运行实例。");
-    setPaging("instances", runPage, data.next_cursor);
-  }
-  function waterfallRows(data) {
-    const calls = new Map(), milestones = [];
-    for (const e of data.events) {
-      if (String(e.attempt) !== String(data.attempt)) continue;
-      const delta = elapsedMs(data.started_at, e.occurred_at);
-      if (!Number.isFinite(delta) || delta < 0) continue;
-      const at = Math.round(delta * 1000);
-      if (e.kind === "task") {
-        milestones.push({kind:e.kind, label:eventNames[e.event] || e.event, from:at, to:at,
-          outcome:e.error_code || e.event === "failed" ? "failed" : "point", value:"+" + ms(at / 1000)});
-        continue;
-      }
-      const id = e.kind === "model" ? e.dispatch_attempt_id : e.span_id;
-      // A legacy event without an identifier can be drawn but cannot be paired.
-      const key = id ? e.kind + ":" + id : Symbol();
-      const call = calls.get(key) || {kind:e.kind, name:e.model || e.name, id};
-      if (e.event === "started" || e.event === "dispatch_admitted") call.start = at;
-      else {
-        call.end = at;
-        call.error = e.error_code || (e.event === "failed" ? "失败" : null);
-        if (typeof e.duration_ms === "number" && Number.isFinite(e.duration_ms) && e.duration_ms >= 0) {
-          call.duration = Math.round(e.duration_ms * 1000);
-        }
-      }
-      calls.set(key, call);
-    }
-    const rows = [...milestones];
-    for (const call of calls.values()) {
-      const {kind, name, id, start, end, duration, error} = call;
-      const from = start ?? (duration == null ? end : Math.max(0, end - duration));
-      const to = end ?? start;
-      const paired = start != null && end != null && end >= start;
-      const known = duration ?? (paired ? end - start : null);
-      const outcome = error ? "failed" : known != null ? "complete" : end == null ? "open" : "end";
-      const value = known != null ? ms(known / 1000) : end == null ? "本页仅开始" :
-        kind === "model" ? "本页仅结算" : "本页仅结束";
-      const label = [kinds[kind] || kind, name].filter(Boolean).join(" · ");
-      rows.push({kind, label, id, from, to:Math.max(from, to), outcome, value, error});
-    }
-    return rows.sort((a, b) => a.from - b.from);
-  }
-  function renderWaterfall(data) {
-    const panel = byId("waterfall");
-    const rows = waterfallRows(data);
-    panel.replaceChildren();
-    const note = el("p", rows.length
-      ? "相对本次领取时间 · 线段表示区间，圆点表示单个时间点。模型区间从发送准入计至费用结算。"
-      : "本页没有可定位的时间记录。");
-    note.className = "waterfall-note";
-    panel.append(note);
-    if (!rows.length) return;
-    const ended = elapsedMs(data.started_at, data.ended_at);
-    const limit = Math.max(Number.isFinite(ended) ? Math.round(ended * 1000) : 0, ...rows.map(row => row.to));
-    const axis = el("div", "");
-    axis.className = "waterfall-axis";
-    const range = el("span", "");
-    range.className = "waterfall-axis-range";
-    range.append(el("span", "0 ms"), el("span", limit ? ms(limit / 1000) : ""));
-    axis.append(el("span", "运行步骤"), range, el("span", "耗时 / 时间点"));
-    const list = el("div", "");
-    list.className = "waterfall-list";
-    const svgNS = "http://www.w3.org/2000/svg";
-    for (const step of rows) {
-      const row = el("div", ""), label = el("span", step.label), value = el("span", step.value);
-      row.className = "waterfall-row"; row.dataset.kind = step.kind; row.dataset.outcome = step.outcome;
-      label.className = "waterfall-label"; value.className = "waterfall-value";
-      if (step.error) value.append(document.createTextNode(" · " + step.error));
-      row.title = [step.label, step.id, "+" + ms(step.from / 1000), step.value, step.error].filter(Boolean).join(" · ");
-      const track = document.createElementNS(svgNS, "svg");
-      track.setAttribute("class", "waterfall-track");
-      track.setAttribute("width", "100%"); track.setAttribute("height", "18"); track.setAttribute("aria-hidden", "true");
-      const x = offset => (limit ? 100 * offset / limit : 0) + "%";
-      if (step.to > step.from) {
-        const line = document.createElementNS(svgNS, "line");
-        line.setAttribute("x1", x(step.from)); line.setAttribute("x2", x(step.to));
-        line.setAttribute("y1", "9"); line.setAttribute("y2", "9");
-        line.setAttribute("stroke", "currentColor"); line.setAttribute("stroke-width", "6");
-        line.setAttribute("stroke-linecap", "round"); track.append(line);
-      } else {
-        const point = document.createElementNS(svgNS, "circle");
-        point.setAttribute("cx", x(step.from)); point.setAttribute("cy", "9"); point.setAttribute("r", "3");
-        point.setAttribute("fill", "currentColor"); track.append(point);
-      }
-      row.append(label, track, value);
-      list.append(row);
-    }
-    panel.append(axis, list);
-  }
-  function renderTrace(data, focus) {
-    byId("run-detail").hidden = false;
-    if (focus) byId("trace-heading").focus();
-    byId("trace-id").replaceChildren(el("code", data.run_id),
-      document.createTextNode(" · " + [data.profile, "发布版本 " + data.agent_version_id].filter(Boolean).join(" · ")));
-    const facts = byId("run-facts"), bill = data.accounting;
-    facts.replaceChildren();
-    for (const [label,value] of [
-      ["运行状态",stateNames[data.state] || data.state], ["Worker",data.worker_id],
-      ["开始时间",eventTime(data.started_at)], ["结束时间",eventTime(data.ended_at)],
-      ["观测运行耗时",ms(elapsedMs(data.started_at, data.ended_at))],
-      ["结算状态",accounting[bill.state] || bill.state], ["已结算",money(bill.settled_micros)],
-      ["已预留",money(bill.reserved_micros)], ["已知输入 / 输出 Token",
-        (bill.input_tokens ?? "—") + " / " + (bill.output_tokens ?? "—")]
-    ]) {
-      const block = el("div", ""); block.append(el("dt", label), el("dd", value)); facts.append(block);
-    }
-    const note = "第 " + (tracePage.previous.length + 1) + " 页 · " + data.events.length + " 个事件（本地时间）";
-    byId("trace-note").textContent = [note, data.error_code,
-      data.has_capability_spans ? "" : "本次运行没有可用的能力观测记录"].filter(Boolean).join(" · ");
-    renderWaterfall(data);
-    renderEvents(byId("trace"), data.events);
-    setPaging("events", tracePage, data.next_before);
-  }
-  async function loadExplorer(level, focus = false, missingRun = null) {
-    if (!connection || view !== "runs") return;
-    clearTimeout(timer);
-    projectRead?.abort();
-    const request = projectRead = new AbortController();
-    const root = "/v1/projects/" + encodeURIComponent(connection.project) + "/agents";
-    let stage = level;
-    byId("explorer").hidden = false;
-    byId("status").textContent = "正在读取运行记录…";
-    try {
-      if (level === "agents") {
-        const data = await read(root + query(agentPage), request.signal);
-        if (request.signal.aborted) return;
-        if (data.project_id !== connection.project) throw new Error("project");
-        if (missingRun && data.agents.some(a => a.agent_version_id === missingRun.version)) agent = missingRun.version;
-        renderAgents(data);
-        showConnected();
-      }
-      if (agent && level !== "trace") {
-        stage = "runs";
-        const data = await read(root + "/" + encodeURIComponent(agent) + "/runs" + query(runPage), request.signal);
-        if (request.signal.aborted) return;
-        if (data.project_id !== connection.project || data.agent_version_id !== agent) throw new Error("release");
-        renderRuns(data);
-      }
-      if (instance) {
-        stage = "trace";
-        const before = tracePage.cursor ? "?" + new URLSearchParams({before:tracePage.cursor}) : "";
-        const data = await read("/v1/tasks/" + encodeURIComponent(instance.task_id) +
-          "/runs/" + encodeURIComponent(instance.attempt) + "/trace" + before, request.signal);
-        if (request.signal.aborted) return;
-        if (data.project_id !== connection.project) {
-          chooseRun(null);
-          byId("status").textContent = "这次运行不属于当前项目。";
-          return;
-        }
-        if (agent && data.agent_version_id !== agent) {
-          chooseRun(null);
-          byId("status").textContent = "这次运行与所选发布版本不一致。请更改或清除版本选择。";
-          return;
-        }
-        if (data.run_id !== instance.run_id || data.task_id !== instance.task_id) throw new Error("instance");
-        renderTrace(data, focus);
-      }
-      byId("status").textContent = missingRun ? "这次运行不存在或在当前权限下不可见。" : "更新于 " + date(Date.now());
-    } catch (error) {
-      if (request.signal.aborted) return;
-      if (stage === "trace" && error.status === 404) {
-        // A trace hides revoked access behind 404. Rebuild visible lists only after a fresh project check.
-        const version = agent, typedId = byId("run-id").value;
-        clearProject();
-        byId("run-id").value = typedId;
-        return loadExplorer("agents", false, {version});
-      }
-      if (error.status === 401 || error.status === 403) disconnect();
-      else if (stage === "trace") chooseRun(null);
-      else if (stage === "runs") { instance = null; clearRuns(); }
-      else { resetExplorer(); byId("explorer").hidden = false; }
-      byId("status").textContent = error.status ? error.message : "无法读取运行轨迹，请检查连接后刷新。";
-    } finally {
-      if (projectRead === request) { projectRead = null; schedule(); }
-    }
-  }
-  async function showTask(id, focus) {
-    taskRead?.abort();
-    const request = taskRead = new AbortController();
-    selected = id;
-    for (const row of byId("tasks").rows) row.classList.toggle("selected", row.dataset.task === id);
-    byId("detail").hidden = false;
-    if (focus) byId("detail-heading").focus();
-    byId("detail-meta").textContent = id;
-    byId("detail-status").textContent = "正在读取事件…";
-    const table = byId("timeline");
-    table.replaceChildren();
-    try {
-      const data = await read("/v1/tasks/" + encodeURIComponent(id) + "/timeline", request.signal);
-      if (request.signal.aborted) return;
-      byId("detail-meta").textContent = id + " · " + (stateNames[data.state] || data.state) +
-        " · 发布版本 " + data.agent_version_id + (data.error_code ? " · " + data.error_code : "");
-      byId("detail-status").textContent = (data.truncated ? "仅显示最近 " : "显示 ") +
-        data.events.length + " 个事件（本地时间）";
-      renderEvents(table, data.events);
-    } catch (error) {
-      if (request.signal.aborted) return;
-      if (error.status === 401 || error.status === 403) {
-        disconnect(); byId("status").textContent = error.message;
-      } else {
-        byId("detail-status").textContent = error.status ? error.message : "时间线读取失败。";
-      }
-    }
-  }
-  function renderEvents(table, events) {
-    table.replaceChildren();
-    for (const e of events) {
-      const row = el("tr", "");
-      row.dataset.kind = e.kind;
-      if (e.error_code || e.event === "failed") row.className = "failed";
-      cell(row, eventTime(e.occurred_at)); cell(row, kinds[e.kind] || e.kind);
-      cell(row, eventNames[e.event] || e.event); cell(row, e.attempt);
-      const details = cell(row, [e.model || e.name,e.version].filter(Boolean).join(" "), "details");
-      for (const [key,label] of [["digest","版本摘要"],["span_id","调用"],["parent_span_id","父调用"],
-                                  ["dispatch_attempt_id","模型尝试"],["snapshot_id","快照"],["receipt_ref","回执摘要"]]) {
-        if (e[key]) details.append(el("small", label + " " + e[key]));
-      }
-      if (e.reservation_micros != null) details.append(el("small", "预留 " + money(e.reservation_micros)));
-      if (e.actual_micros != null) details.append(el("small", "结算 " + money(e.actual_micros)));
-      if (e.input_tokens != null || e.output_tokens != null) {
-        details.append(el("small", "输入 / 输出 Token " + (e.input_tokens ?? "—") + " / " + (e.output_tokens ?? "—")));
-      }
-      cell(row, ms(e.duration_ms)); cell(row, e.error_code, e.error_code ? "warning" : "");
-      table.append(row);
-    }
-    if (!events.length) empty(table, 7, "尚无可见事件。");
-  }
-  function switchView(next, navigate = true) {
-    if (view === next) return;
-    projectRead?.abort(); taskRead?.abort();
-    view = next;
-    if (navigate) history.pushState(null, "", viewUrl(view));
-    setViewButtons();
-    byId("report").hidden = true;
-    clearInventory();
-    byId("resource-type").value = "";
-    resetExplorer();
-    clearDetail();
-    refresh();
-  }
-  byId("overview-view").addEventListener("click", () => switchView("overview"));
-  byId("runs-view").addEventListener("click", () => switchView("runs"));
-  byId("resources-view").addEventListener("click", () => switchView("resources"));
-  byId("resource-type").addEventListener("change", renderResourceTable);
-  window.addEventListener("popstate", () => switchView(initialView(), false));
-  byId("agent-version").addEventListener("change", event => {
-    agent = event.target.value; instance = null; runPage = pageState();
-    byId("run-id").value = "";
-    clearRuns(); loadExplorer("runs");
-  });
-  byId("find-run").addEventListener("submit", event => {
-    event.preventDefault();
-    const runId = byId("run-id").value.trim();
-    const parts = /^([^\s:/\\?#]+):([1-9]\d{0,19})$/.exec(runId);
-    if (!parts || parts[1] === "." || parts[1] === ".." || BigInt(parts[2]) > 18446744073709551615n) {
-      projectRead?.abort(); chooseRun(null); schedule();
-      byId("status").textContent = "请输入有效的运行 ID，格式为 任务 ID:尝试次数。";
-      return;
-    }
-    chooseRun({run_id:runId, task_id:parts[1], attempt:parts[2]});
-    loadExplorer("trace", true);
-  });
-  for (const [prefix,level] of [["agents","agents"],["instances","runs"],["events","trace"]]) {
-    byId(prefix + "-prev").addEventListener("click", () => changePage(level, false));
-    byId(prefix + "-next").addEventListener("click", () => changePage(level, true));
-  }
-  byId("connect").addEventListener("submit", event => {
-    event.preventDefault();
-    const project = byId("project").value.trim(), token = byId("token").value.trim();
-    if (!project || !token || project === "." || project === "..") {
-      byId("status").textContent = "请填写有效的项目 ID 和访问令牌。";
-      return;
-    }
-    disconnect();
-    connection = {project,token};
-    showConnection();
-    refresh();
-  });
-  byId("disconnect").addEventListener("click", disconnect);
-  byId("refresh").addEventListener("click", refresh);
-  byId("automatic").addEventListener("change", schedule);
-  byId("hours").addEventListener("change", () => { clearDetail(); resetExplorer(); refresh(); });
-  document.addEventListener("visibilitychange", schedule);
-  window.addEventListener("pagehide", disconnect);
-  history.replaceState(null, "", viewUrl(view));
-  setViewButtons();
-})();
-</script>
+<!-- console scripts -->
 </body>
 </html>

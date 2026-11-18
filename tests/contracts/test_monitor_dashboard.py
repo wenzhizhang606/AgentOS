@@ -31,6 +31,7 @@ class DashboardMarkup(HTMLParser):
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
         if "id" in attributes:
+            assert attributes["id"] not in self.by_id, f"Duplicate control ID: {attributes['id']}"
             self.by_id[attributes["id"]] = attributes
         for key in ("src", "href", "action"):
             if attributes.get(key):
@@ -51,6 +52,8 @@ def test_ac013_monitor_shell_contains_no_data_or_remote_assets(monitor_page):
     assert monitor_page.headers["cache-control"] == "no-store"
     assert "connect-src 'self'" in monitor_page.headers["content-security-policy"]
     assert monitor_page.headers["referrer-policy"] == "no-referrer"
+    assert "<!-- console styles -->" not in monitor_page.text
+    assert "<!-- console scripts -->" not in monitor_page.text
     markup = DashboardMarkup()
     markup.feed(monitor_page.text)
     assert not markup.asset_urls
@@ -80,14 +83,14 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
         "summary": {"tasks": 4, "queued": 0, "running": 0, "succeeded": 3, "failed": 1,
                     "cancelled": 0, "timed_out": 0, "tasks_with_spans": 1, "dispatches": 1,
                     "skill_calls": "17", "tool_calls": "34",
-                    "usage_receipts": 0, "pending_receipts": 1, "input_tokens": "0", "output_tokens": "0",
+                    "usage_receipts": 0, "pending_receipts": 1, "input_tokens": "9007199254740993", "output_tokens": "0",
                     "settled_micros": "0", "reserved_micros": "9007199254740993"},
         "capabilities": [dict(capability, calls=1, succeeded=0, failed=1, unfinished=0,
                               avg_duration_ms=12, max_duration_ms=12)], "capabilities_truncated": False,
         "recent_tasks": [{"task_id": task_id, "created_at": "2026-11-18T09:55:00Z", "state": "failed",
                           "accounting_state": "pending", "error_code": "EXTERNAL_OUTCOME_UNKNOWN"}],
     }
-    timeline = {"task_id": task_id, "state": "failed", "agent_version_id": "pinned", "truncated": False,
+    timeline = {"task_id": task_id, "project_id": tenant_project, "state": "failed", "agent_version_id": "pinned", "truncated": False,
                 "events": [dict(capability, occurred_at="2026-11-18T09:55:00Z", event="failed",
                                 attempt=1, duration_ms=12, error_code="LOOKUP_FAILED", span_id="span-1")]}
     summary_path = "/v1/projects/returns/monitoring"
@@ -138,6 +141,9 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             metrics = page.locator("#metrics > div")
             assert metrics.filter(has_text="Skill 调用总数").locator("dd").inner_text() == "17"
             assert metrics.filter(has_text="Tool 调用总数").locator("dd").inner_text() == "34"
+            assert metrics.filter(has_text="已知输入 Token").locator("dd").inner_text() == "9007199254740993"
+            assert metrics.locator("dt svg[aria-hidden=true]").count() == 4
+            assert page.locator('#tasks [data-state="pending"]').inner_text() == "待结算"
             legend = page.locator("#status-chart .chart-legend")
             for state, count in {"succeeded": "3", "failed": "1", "queued": "0"}.items():
                 assert legend.locator(f'li[data-state="{state}"] strong').inner_text() == count
@@ -157,9 +163,14 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             assert page.locator("#token").input_value() == ""
             assert page.evaluate("localStorage.length + sessionStorage.length") == 0
 
-            page.get_by_role("button", name=task_id).click()
+            page.get_by_role("button", name=task_id).focus()
+            page.keyboard.press("Enter")
             page.locator("#timeline").get_by_text("LOOKUP_FAILED").wait_for()
             assert "span-1" in page.locator("#timeline").inner_text()
+            timeline["project_id"] = "different-project"
+            page.get_by_role("button", name=task_id, exact=True).click()
+            page.locator("#detail-status").get_by_text("时间线读取失败。").wait_for()
+            assert page.locator("#timeline").inner_text() == ""
             page.get_by_role("button", name="断开连接").click()
             for chart in ("status-chart", "call-chart"):
                 assert page.locator("#" + chart).text_content() == ""
@@ -174,6 +185,9 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             assert page.locator("#status-chart circle.ring-segment").count() == 0
             assert calls.locator('[data-kind="tool"] .call-count').inner_text() == "0"
             assert calls.locator('[data-kind="skill"] .call-count').inner_text() == "—"
+            empty_tasks = page.locator("#tasks").get_by_role("cell", name="该时间范围内没有可见任务。")
+            assert empty_tasks.get_attribute("colspan") == "5"
+            assert empty_tasks.locator("svg[aria-hidden=true]").count() == 1
             revoke = True
             page.get_by_role("button", name="刷新", exact=True).click()
             page.get_by_text("读取失败（HTTP 403）").wait_for()
@@ -183,7 +197,7 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             assert page.get_by_role("button", name="载入项目").is_visible()
             assert page.locator("#connected-project").inner_text() == ""
             assert page.locator("#connection-state").inner_text() == "未连接"
-            assert [path for path, _, _ in seen] == [summary_path, timeline_path, summary_path, summary_path]
+            assert [path for path, _, _ in seen] == [summary_path, timeline_path, timeline_path, summary_path, summary_path]
             assert all(header == "Bearer " + token and token not in query for _, header, query in seen)
             assert not unexpected
         finally:
@@ -196,7 +210,9 @@ def test_ac013_browser_agent_paging_attempts_history_scope_and_revocation(monito
     token = "run-reader"
     window = dict(project_id="returns", scope="subject", window_start="2026-11-17T10:00:00.000000Z",
                   window_end="2026-11-18T10:00:00.000000Z", next_cursor=None)
-    overview = dict(window, summary={"tasks": 1}, capabilities=[], recent_tasks=[],
+    overview = dict(window, summary={"tasks": 1}, capabilities=[],
+                    recent_tasks=[dict(task_id="task01", state="succeeded", accounting_state="final",
+                                       created_at=window["window_start"])],
                     active_release={"version_id": "current", "capabilities": []})
     base = "/v1/projects/returns"
     runs_path = base + "/agents/older/runs"
@@ -246,6 +262,10 @@ def test_ac013_browser_agent_paging_attempts_history_scope_and_revocation(monito
         seen.append((url.path, query, request.headers.get("authorization")))
         if url.path == base + "/monitoring":
             data = overview
+        elif url.path == "/v1/tasks/task01/timeline":
+            data = dict(task_id="task01", project_id="returns", state="succeeded", agent_version_id="older",
+                        events=[dict(kind="task", event=event, attempt=attempt, occurred_at=window["window_start"])
+                                for event, attempt in (("queued", 0), ("claimed", 1), ("claimed", 2))])
         elif url.path == base + "/agents":
             if revoke:
                 route.fulfill(status=403, json={"error": {"code": "FORBIDDEN"}})
@@ -287,7 +307,13 @@ def test_ac013_browser_agent_paging_attempts_history_scope_and_revocation(monito
             page.get_by_label("访问令牌", exact=True).fill(token)
             page.get_by_role("button", name="载入项目").click()
             page.locator("#report").wait_for()
-            page.get_by_role("button", name="Agent 运行轨迹").click()
+            page.get_by_role("button", name="task01", exact=True).click()
+            task_links = page.locator("#timeline").get_by_role("button")
+            task_links.last.wait_for()
+            assert task_links.count() == 2
+            page.get_by_role("button", name="查看任务 task01 第 2 次运行轨迹").click()
+            page.locator("#trace-id").get_by_text("task01:2", exact=True).wait_for()
+            assert page.locator("#trace-heading").evaluate("el => el === document.activeElement")
             assert page.url == "http://monitor.invalid/console#runs"
             assert page.get_by_role("heading", level=1, name="Agent 运行轨迹").is_visible()
             assert page.locator("#runs-view").get_attribute("aria-pressed") == "true"
@@ -312,6 +338,8 @@ def test_ac013_browser_agent_paging_attempts_history_scope_and_revocation(monito
             assert waterfall.locator('[data-kind="model"] .waterfall-value').inner_text() == "本页仅结算"
             facts = page.locator("#run-facts")
             assert "9007199254740993 / 12" in facts.inner_text() and "12.335 ms" in facts.inner_text()
+            assert facts.locator('[data-state="final"]').inner_text() == "已结算"
+            assert facts.locator("div").filter(has_text="Worker").locator("dd").inner_text() == "—"
             assert "task01:2" in page.locator("#trace-id").inner_text()
             page.get_by_role("button", name="更早事件").click()
             events.get_by_text("earlier-only").wait_for()
@@ -462,6 +490,10 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
             assert not requests
             skill_count, tool_count = page.locator("#skill-inventory"), page.locator("#tool-inventory")
             table = page.locator("#catalog-table")
+            search = page.get_by_role("searchbox", name="资源名称")
+            reset = page.get_by_role("button", name="清除筛选")
+            dialog = page.get_by_role("dialog", name="资源详情")
+            detail_facts = page.locator("#resource-detail-facts")
 
             def login():
                 page.get_by_label("项目 ID", exact=True).fill("returns")
@@ -473,13 +505,39 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
             assert requests == [(resources_api, "", "Bearer " + token)]
             assert page.locator("#hours").is_hidden()
             assert page.locator("#catalog-release").inner_text() == catalog["agent_version_id"]
-            assert table.get_by_text("unused-guidance").is_visible()
-            assert table.get_by_text("2" * 64).text_content() == "2" * 64
+            resource = table.get_by_role("button", name="unused-guidance")
+            assert resource.is_visible()
+            assert "2" * 64 not in table.text_content()
+            preview = table.get_by_text("22222222…222222")
+            assert preview.is_hidden()
+            page.set_viewport_size({"width": 1280, "height": 760})
+            assert preview.is_visible()
+            page.set_viewport_size({"width": 320, "height": 760})
+            resource.focus()
+            page.keyboard.press("Enter")
+            assert dialog.is_visible()
+            assert dialog.locator("dd").all_text_contents() == ["unused-guidance", "Skill", "2", "2" * 64]
+            assert dialog.get_by_role("button", name="关闭详情").evaluate("b => b === document.activeElement")
+            assert dialog.evaluate("d => d.clientWidth >= d.scrollWidth && d.getBoundingClientRect().right <= innerWidth")
+            page.keyboard.press("Escape")
+            assert dialog.is_hidden() and detail_facts.text_content() == ""
+            assert resource.evaluate("b => b === document.activeElement")
+            resource.click()
+            dialog.get_by_role("button", name="关闭详情").click()
+            assert resource.evaluate("b => b === document.activeElement")
             assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
             for kind, expected in (("tool", ["lookup"]), ("skill", ["unused-guidance", "citations"])):
                 page.get_by_label("资源类型").select_option(kind)
                 assert table.locator(".resource-name").all_text_contents() == expected
                 assert (skill_count.inner_text(), tool_count.inner_text()) == ("2", "1")
+            search.fill(" GUIDance ")
+            assert table.locator(".resource-name").all_text_contents() == ["unused-guidance"]
+            page.get_by_label("资源类型").select_option("tool")
+            assert table.get_by_text("没有匹配的资源。").is_visible()
+            assert page.locator("#catalog-result").inner_text() == "显示 0 / 3 项资源"
+            reset.click()
+            assert reset.is_disabled() and search.evaluate("input => input === document.activeElement")
+            assert table.locator(".resource-name").count() == 3
             assert len(requests) == 1
 
             page.locator("#overview-view").click()
@@ -489,21 +547,42 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
             page.locator("#resources-view").click()
             table.get_by_text("unused-guidance").wait_for()
             assert page.url == origin + "/console#resources" and table.locator(".resource-name").count() == 3
+            resource.click()
             page.go_back()
             page.locator("#report").wait_for()
+            assert dialog.is_hidden() and detail_facts.text_content() == ""
             page.go_forward()
             table.get_by_text("unused-guidance").wait_for()
             assert pages == ["/resources"]
             assert [path for path, _, _ in requests] == [
                 resources_api, overview_api, resources_api, overview_api, resources_api]
 
+            page.clock.install()
+            page.locator("#automatic").check()
+            resource.click()
+            with page.expect_response(lambda response: resources_api in response.url):
+                page.clock.fast_forward(30_000)
+            page.locator("#status").filter(has_text="更新于").wait_for()
+            assert dialog.is_visible() and detail_facts.get_by_text("2" * 64).is_visible()
             catalog.update(resources=[], counts={"skill": 0, "tool": 0})
-            page.get_by_role("button", name="刷新", exact=True).click()
-            table.get_by_text("当前发布没有此类型的资源。").wait_for()
+            page.clock.fast_forward(30_000)
+            table.get_by_text("当前发布尚未启用 Skill 或 Tool。").wait_for()
+            assert dialog.is_hidden() and detail_facts.text_content() == ""
+            assert search.evaluate("input => input === document.activeElement")
             assert (skill_count.inner_text(), tool_count.inner_text()) == ("0", "0")
+            catalog.update(resources=[{"kind": "tool", "name": "lookup", "version": "1", "digest": "1" * 64}],
+                           counts={"skill": 0, "tool": 1})
+            page.get_by_role("button", name="刷新", exact=True).click()
+            table.get_by_text("lookup").wait_for()
             for status in (503, 401, 403):
-                page.get_by_role("button", name="刷新", exact=True).click()
+                if status in (503, 403):
+                    page.locator("#automatic").check()
+                    table.get_by_role("button", name="lookup").click()
+                    page.clock.fast_forward(30_000)
+                else:
+                    page.get_by_role("button", name="刷新", exact=True).click()
                 page.get_by_text(f"读取失败（HTTP {status}）", exact=True).wait_for()
+                assert dialog.is_hidden() and detail_facts.text_content() == ""
                 assert table.text_content() == skill_count.text_content() == tool_count.text_content() == ""
                 assert page.locator("#catalog-release").text_content() == ""
                 if status in (401, 403):
