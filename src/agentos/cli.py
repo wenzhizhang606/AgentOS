@@ -6,6 +6,8 @@ import logging
 import os
 from pathlib import Path
 
+from dotenv import dotenv_values
+
 from agentos.control.release import Release
 
 
@@ -46,6 +48,16 @@ def main():
     receipt.add_argument("--input-tokens", type=int)
     receipt.add_argument("--output-tokens", type=int)
     args = parser.parse_args()
+    # Compose injects settings into each service. A native CLI launch reads the
+    # project file in the current directory, preserving explicit process settings.
+    for name, value in dotenv_values(".env", encoding="utf-8-sig", interpolate=False).items():
+        if not name.startswith("AGENTOS_") or value is None:
+            continue
+        if name in {"AGENTOS_MIGRATION_PASSWORD", "AGENTOS_PYPI_INDEX_URL"}:
+            continue
+        if name == "AGENTOS_MODEL_API_KEY" and args.command != "worker":
+            continue
+        os.environ.setdefault(name, value)
     if args.command == "worker-healthcheck":
         from agentos.worker.service import heartbeat_is_recent
 
@@ -57,7 +69,7 @@ def main():
         return
     release = None
     if args.command in {"release-id", "capabilities", "api", "worker"}:
-        release = Release.load(os.environ["AGENTOS_RELEASE_FILE"])
+        release = Release.load(os.environ["AGENTOS_RELEASE_FILE"], environ=os.environ)
     if args.command == "capabilities":
         print(json.dumps({"release_id": release.version_id, "capabilities": release.catalog_metadata()},
                          ensure_ascii=False, indent=2))

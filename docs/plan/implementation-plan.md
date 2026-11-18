@@ -161,6 +161,8 @@ M1使用TASK-004已验收证据子集和TASK-015的身份/输入/发送/投递�
 
 ## 里程碑与检查点
 
+TASK-004、TASK-005 和 TASK-008 在 M1 中通过部署环境固定模型、预算参数和检索策略，覆盖 AC-002 的候选证据选择及 AC-010 的配置绑定。[发布配置](../changes/model-rag-environment.md)
+
 TASK-009 与 TASK-017 的首批本地只读能力已进入实现，交付文本 Skill、词法检索 Tool、项目监控和任务时间线。可观察范围、接入示例和仍待验收的条目见[变更规格](../changes/capability-monitoring.md)。
 
 TASK-009 的 M1 实例检查视图支持按 Agent 发布版本和运行尝试定位轨迹。补充的 AC-013 案例核对重领归属、运行窗口及观察权限。代码与配套测试待统一运行验收。[实例轨迹变更规格](../changes/agent-run-trace.md)

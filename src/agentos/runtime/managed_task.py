@@ -39,7 +39,7 @@ def _prepare_and_admit(store, task, release):
             retention_mode=release.retention_mode, release_id=release.version_id,
             destination=release.endpoint, attempt=task["attempt"],
             identity_ref=task["subject_id"], authorization_revision=epoch,
-            capabilities=release.capabilities, observe=observe_capability,
+            capabilities=release.capabilities, observe=observe_capability, rag=release.rag,
         )
 
     meta = {"kind": "context", "name": "prepare_context", "version": "evidence/1",

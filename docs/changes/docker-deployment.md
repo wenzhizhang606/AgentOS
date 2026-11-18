@@ -31,7 +31,9 @@ API 默认只发布在宿主机 `127.0.0.1:8000`。业务监控共用这个端�
    Copy-Item examples/m1/release-capabilities.json local/release.json
    ```
 
-   在 `.env` 中分别设置 `MYSQL_ROOT_PASSWORD`、`AGENTOS_MIGRATION_PASSWORD`、`AGENTOS_MYSQL_PASSWORD` 三个独立数据库口令，以及真实 `AGENTOS_MODEL_API_KEY`。模板内的空值用于阻止误启动。若需改宿主机端口，设置 `AGENTOS_API_PORT`。在发布文件中替换模型标识、HTTPS 端点、窗口和单价。API 与 worker 需要相同的发布文件；模型密钥只交给 worker。
+   在 `.env` 中分别设置 `MYSQL_ROOT_PASSWORD`、`AGENTOS_MIGRATION_PASSWORD`、`AGENTOS_MYSQL_PASSWORD` 三个独立数据库口令。填写实际模型部署名、完整 HTTPS 调用地址、模型密钥及该模型的窗口和单价，按需调整检索参数。若需改宿主机端口，设置 `AGENTOS_API_PORT`。Compose 将发布配置同时传给 API 和 worker，模型密钥只交给 worker。[模型与检索配置](model-rag-environment.md)
+
+   构建镜像时，pip 默认从 `https://pypi.org/simple` 安装依赖。若服务器访问 PyPI 较慢，可在 `.env` 中将 `AGENTOS_PYPI_INDEX_URL` 设为可信的公开 HTTPS 包索引地址。该地址作为构建参数传递，应使用无需凭证的 URL。
 
 2. 首次创建本地调用凭证。本示例生成随机 Bearer 令牌，令牌留在当前 PowerShell 会话中，磁盘文件只保存其摘要。已有凭证文件可跳过。
 

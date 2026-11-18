@@ -3,6 +3,7 @@ FROM python:3.12-slim-bookworm AS build
 WORKDIR /build
 COPY pyproject.toml LICENSE ./
 COPY src/ ./src/
+ARG PIP_INDEX_URL=https://pypi.org/simple
 RUN pip install --no-cache-dir --prefix=/install .
 
 FROM python:3.12-slim-bookworm

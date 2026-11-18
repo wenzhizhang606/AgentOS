@@ -1,6 +1,6 @@
 """The read-only support profile and its immutable deployment configuration."""
 
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from functools import lru_cache
 import hashlib
 from importlib.resources import files
@@ -9,6 +9,36 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from agentos.control.capabilities import Capability, parse_capabilities
+from agentos.knowledge.rag import RagSettings
+
+
+_MODEL_ENV = {
+    "AGENTOS_MODEL_NAME": ("model", str),
+    "AGENTOS_MODEL_API_URL": ("endpoint", str),
+    "AGENTOS_MODEL_WINDOW_TOKENS": ("window_tokens", int),
+    "AGENTOS_MODEL_MAX_OUTPUT_TOKENS": ("max_output_tokens", int),
+    "AGENTOS_MODEL_SAFETY_MARGIN_TOKENS": ("safety_margin_tokens", int),
+    "AGENTOS_MODEL_INPUT_MICROS_PER_MILLION": ("input_micros_per_million", int),
+    "AGENTOS_MODEL_OUTPUT_MICROS_PER_MILLION": ("output_micros_per_million", int),
+}
+_RAG_ENV = {
+    "AGENTOS_RAG_TOP_K": ("top_k", int),
+    "AGENTOS_RAG_MIN_SCORE": ("min_score", float),
+    "AGENTOS_RAG_TITLE_WEIGHT": ("title_weight", float),
+    "AGENTOS_RAG_BODY_WEIGHT": ("body_weight", float),
+}
+
+
+def _overrides(settings, environ):
+    values = {}
+    for variable, (field, parse) in settings.items():
+        value = environ.get(variable, "").strip()
+        if value:
+            try:
+                values[field] = parse(value)
+            except ValueError:
+                raise ValueError(f"Invalid value for {variable}") from None
+    return values
 
 
 @lru_cache(maxsize=1)
@@ -17,7 +47,7 @@ def _components():
     root = files("agentos")
     paths = (
         "control/release.py", "api/app.py", "governance/auth.py", "runtime/managed_task.py",
-        "worker/service.py", "knowledge/retrieval.py", "context/service.py",
+        "worker/service.py", "knowledge/retrieval.py", "knowledge/rag.py", "context/service.py",
         "gateways/model/client.py", "adapters/mysql/store.py", "contracts/errors.py",
         "control/capabilities.py", "gateways/tool/registry.py", "gateways/tool/evidence.py",
         "observability/capabilities.py",
@@ -39,8 +69,13 @@ class Release:
     retention_mode: str
     currency: str = "CNY"
     capabilities: tuple[Capability, ...] = ()
+    rag: RagSettings = RagSettings()
 
     def __post_init__(self):
+        if isinstance(self.rag, dict):
+            object.__setattr__(self, "rag", RagSettings(**self.rag))
+        elif not isinstance(self.rag, RagSettings):
+            raise ValueError("Expected a RAG configuration object")
         if isinstance(self.capabilities, list):
             object.__setattr__(self, "capabilities", parse_capabilities(self.capabilities))
         elif not isinstance(self.capabilities, tuple) or any(
@@ -69,12 +104,20 @@ class Release:
             raise ValueError("Price exceeds supported integer range")
 
     @classmethod
-    def load(cls, path: str):
-        return cls(**json.loads(Path(path).read_text(encoding="utf-8")))
+    def load(cls, path: str, *, environ=None):
+        config = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+        if environ is not None:
+            config.update(_overrides(_MODEL_ENV, environ))
+            rag = config.get("rag", {})
+            if not isinstance(rag, dict):
+                raise ValueError("Expected a RAG configuration object")
+            config["rag"] = {**rag, **_overrides(_RAG_ENV, environ)}
+        return cls(**config)
 
     @property
     def manifest(self) -> dict:
-        config = {f.name: getattr(self, f.name) for f in fields(self) if f.name != "capabilities"}
+        config = {f.name: getattr(self, f.name) for f in fields(self) if f.name not in {"rag", "capabilities"}}
+        config["rag"] = asdict(self.rag)
         if self.capabilities:
             config["capabilities"] = [cap.manifest() for cap in self.capabilities]
         retrieval = next((cap.implementation for cap in self.capabilities if cap.kind == "tool"), "lexical/1")

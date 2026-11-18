@@ -1,14 +1,15 @@
 """Assemble the exact text-only chat request and a separately retainable snapshot."""
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from hashlib import sha256
 import json
 from uuid import uuid4
 
 from agentos.contracts.errors import PlatformError
 from agentos.control.capabilities import Capability
-from agentos.gateways.tool.evidence import execute_evidence
+from agentos.gateways.tool.evidence import MAX_HITS, execute_evidence
+from agentos.knowledge.rag import RagSettings
 from agentos.knowledge.retrieval import retrieve
 
 
@@ -69,7 +70,8 @@ def prepare_context(*, task_id: str, question: str, candidates: Iterable[dict], 
                     retention_mode: str = "metadata_only", release_id: str = "m1",
                     destination: str = "configured-model", attempt: int = 1,
                     identity_ref: str = "", authorization_revision: int | None = None,
-                    capabilities: tuple[Capability, ...] = (), observe=None) -> PreparedContext:
+                    capabilities: tuple[Capability, ...] = (), observe=None,
+                    rag: RagSettings = RagSettings()) -> PreparedContext:
     if retention_mode not in {"metadata_only", "redacted", "full"}:
         raise PlatformError("INVALID_ARGUMENT", "Unknown snapshot retention mode")
     if type(question) is not str or not question.strip():
@@ -100,16 +102,18 @@ def prepare_context(*, task_id: str, question: str, candidates: Iterable[dict], 
             skills.append(observe(cap.metadata(), lambda cap=cap: load_skill(cap)))
         elif cap.kind == "tool":
             tool = cap
+    ceiling = tool.limit if tool else MAX_HITS
+    candidate_limit = ceiling if rag.rerank else min(ceiling, rag.top_k)
     if tool is not None:
-        args = {"query": question, "limit": tool.limit}
+        args = {"query": question, "limit": candidate_limit}
         ranked = observe(tool.metadata(), lambda: execute_evidence(
             tool.implementation, args, candidates, max_hits=tool.limit, expected_digest=tool.implementation_digest))
     else:
-        ranked = retrieve(question, candidates)
-    if not ranked:
+        ranked = retrieve(question, candidates, limit=candidate_limit)
+    selected = rag.select(question, ranked)
+    if not selected:
         raise PlatformError("MISSING_EVIDENCE", "No matching authorized source")
-    for match in ranked:
-        source = match.source
+    for source in selected:
         label = f"E{len(evidence) + 1}"
         ref = {key: source[key] for key in ("source_id", "version", "location")}
         entry = {**ref, "label": label, "text": source["text"], "title": source.get("title", "")}
@@ -146,7 +150,8 @@ def prepare_context(*, task_id: str, question: str, candidates: Iterable[dict], 
         "stored_payload_digest": sha256(retained).hexdigest() if retained is not None else None,
         "selection_manifest": {
             "policy": tool.implementation if tool else "lexical/1", "retained": [ref["label"] for ref in source_refs],
-            "unfitted_ranked_candidates": len(ranked) - len(evidence),
+            "rag": asdict(rag), "candidate_limit": candidate_limit,
+            "unfitted_ranked_candidates": len(selected) - len(evidence),
             "required_inputs": ["agent-policy:" + release_id, "question:" + task_id],
         },
         "budget": {"model_window_tokens": window_tokens, "max_input_tokens": allowance,
