@@ -1,0 +1,155 @@
+"""M1 API -> MySQL -> worker -> model double -> authorized delivery."""
+
+from datetime import datetime, timedelta, timezone
+from hashlib import sha256
+from io import BytesIO
+import json
+import os
+from unittest.mock import Mock
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+import pytest
+
+from agentos.adapters.mysql.store import MySQLStore
+from agentos.api.app import create_app
+from agentos.contracts.errors import PlatformError
+from agentos.control.release import Release
+from agentos.gateways.model.client import ChatModel, ModelAnswer
+from agentos.governance.auth import Authenticator, Identity
+from agentos.runtime.managed_task import run_one
+
+
+pytestmark = [pytest.mark.mysql, pytest.mark.skipif(os.getenv("AGENTOS_TEST_MYSQL") != "1",
+              reason="Requires a migrated, disposable MySQL database")]
+
+
+@pytest.fixture
+def deployment():
+    store = MySQLStore.from_env()
+    tenant = uuid4().hex
+    release = Release("https://model.example.invalid/v1/chat/completions", tenant, 8192,
+                      128, 64, 1_000_000, 2_000_000, "metadata_only")
+    token = uuid4().hex
+    now = datetime.now(timezone.utc)
+    identity = Identity(tenant, "operator", ("support",), now + timedelta(hours=1))
+    auth = Authenticator({sha256(token.encode()).hexdigest(): identity})
+    store.register_release(release.version_id, release.manifest)
+    store.set_access(tenant, "operator", "support", True)
+    store.put_source(tenant, "support", "return-policy", "售后政策", "签收后七天内可退货。", "section-1")
+    client = TestClient(create_app(store, auth, release.version_id))
+    client.headers.update({"Authorization": "Bearer " + token})
+    request = {"agent_version_id": release.version_id, "project_id": "support",
+               "goal": "售后政策允许多少天内退货？", "completion_criteria_ref": "criteria_support_readonly_v1",
+               "deadline_at": (now + timedelta(minutes=5)).isoformat().replace("+00:00", "Z"),
+               "budget": {"currency": "CNY", "limit_micros": 10000}}
+    with client:
+        yield store, release, identity, client, request
+
+
+class Model:
+    def __init__(self, unknown=False):
+        self.calls = 0
+        self.unknown = unknown
+
+    def generate(self, prepared, *, send_before):
+        self.calls += 1
+        if self.unknown:
+            raise PlatformError("EXTERNAL_OUTCOME_UNKNOWN", "Simulated lost receipt")
+        return ModelAnswer("七天 [E1]", prepared.source_refs, 100, 10, "receipt-" + prepared.snapshot_id)
+
+
+def submit(client, request):
+    response = client.post("/v1/tasks", headers={"Idempotency-Key": "create"}, json=request)
+    assert response.status_code == 202, response.text
+    return response.json()["task_id"]
+
+
+def test_ac_001_009_012_answer_charge_and_withdrawal(deployment):
+    store, release, identity, client, request = deployment
+    task_id = submit(client, request)
+    assert submit(client, request) == task_id
+    model = ChatModel(release.endpoint, "fixture-key")
+    model._transport = Mock()
+    reply = {"id": "provider-receipt", "usage": {"prompt_tokens": 100, "completion_tokens": 10},
+             "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "七天 [E1]"}}]}
+    model._transport.open.return_value = BytesIO(json.dumps(reply).encode())
+    assert run_one(store, model, release, "worker")
+    result = client.get("/v1/tasks/" + task_id).json()
+    assert result["state"] == "succeeded"
+    assert result["settled_micros"] == 120 and result["reserved_micros"] == 0
+    answer = result["result"]
+    assert answer["citations"][0]["source_id"] == "return-policy"
+    snapshot_url = "/v1/context-snapshots/" + answer["snapshot_id"]
+    snapshot = client.get(snapshot_url).json()
+    assert snapshot["source_refs"] == answer["citations"]
+    actual_request = model._transport.open.call_args.args[0]
+    assert sha256(actual_request.data).hexdigest() == snapshot["wire_digest"]
+    assert snapshot.get("retained_payload") is None
+    assert not run_one(store, model, release, "worker-2")
+    model._transport.open.assert_called_once()
+    store.delete_source(identity.tenant_id, "support", "return-policy")
+    assert client.get("/v1/tasks/" + task_id).json()["result"] is None
+    assert client.get(snapshot_url).status_code in {403, 404, 409, 410}
+
+
+def test_ac_009_unknown_outcome_is_not_redispatched(deployment):
+    store, release, _, client, request = deployment
+    task_id = submit(client, request)
+    model = Model(unknown=True)
+    assert run_one(store, model, release, "worker")
+    run_one(store, model, release, "replacement")
+    result = client.get("/v1/tasks/" + task_id).json()
+    assert model.calls == 1
+    assert result["accounting_state"] == "pending"
+    assert result["reserved_micros"] == release.reservation_micros
+    assert result["result"] is None
+
+
+def test_ac_009_budget_denied_before_external_send(deployment):
+    store, release, _, client, request = deployment
+    request["budget"]["limit_micros"] = release.reservation_micros - 1
+    task_id = submit(client, request)
+    model = Model()
+    assert run_one(store, model, release, "worker")
+    result = client.get("/v1/tasks/" + task_id).json()
+    assert result["error_code"] == "BUDGET_EXHAUSTED"
+    assert result["settled_micros"] == model.calls == 0
+
+
+def test_ac_012_revoke_between_preparation_and_admission(deployment, monkeypatch):
+    store, release, identity, client, request = deployment
+    task_id = submit(client, request)
+    original = store.admit
+
+    def revoke_then_admit(*args):
+        store.set_access(identity.tenant_id, identity.subject_id, "support", False)
+        return original(*args)
+
+    monkeypatch.setattr(store, "admit", revoke_then_admit)
+    model = Model()
+    assert run_one(store, model, release, "worker")
+    assert model.calls == 0
+    assert client.get("/v1/tasks/" + task_id).status_code == 404
+    store.set_access(identity.tenant_id, identity.subject_id, "support", True)
+    task = client.get("/v1/tasks/" + task_id).json()
+    assert task["error_code"] == "FORBIDDEN" and task["dispatch_attempt_id"] is None
+
+
+def test_ac_002_revision_race_rebuilds_input_once(deployment, monkeypatch):
+    store, release, identity, client, request = deployment
+    task_id = submit(client, request)
+    original = store.admit
+    versions = []
+
+    def revise_then_admit(task, snapshot, reserve, retained):
+        versions.append(snapshot["source_refs"][0]["version"])
+        if len(versions) == 1:
+            store.put_source(identity.tenant_id, "support", "return-policy", "售后政策", "七天内退货。", "section-1")
+        return original(task, snapshot, reserve, retained)
+
+    monkeypatch.setattr(store, "admit", revise_then_admit)
+    model = Model()
+    assert run_one(store, model, release, "worker")
+    assert versions == [1, 2] and model.calls == 1
+    assert client.get("/v1/tasks/" + task_id).json()["result"]["citations"][0]["version"] == 2

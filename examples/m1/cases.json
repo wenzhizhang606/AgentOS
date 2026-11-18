@@ -1,0 +1,14 @@
+[
+  {
+    "case_id": "return-window",
+    "question": "未拆封商品在签收之后多久可以申请退货？仅回答天数和引用。",
+    "evidence": [{"source_id": "return-policy", "version": 1, "location": "section-1"}],
+    "answer_pattern": "(?:七|7)天[。 ]*\\[E1\\][。.]?"
+  },
+  {
+    "case_id": "no-match",
+    "question": "orbital ephemeris",
+    "evidence": [],
+    "expected_error": "MISSING_EVIDENCE"
+  }
+]

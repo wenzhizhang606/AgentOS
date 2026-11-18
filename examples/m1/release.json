@@ -1,0 +1,11 @@
+{
+  "endpoint": "https://model.example.invalid/v1/chat/completions",
+  "model": "replace-with-pinned-deployment",
+  "window_tokens": 8192,
+  "max_output_tokens": 512,
+  "safety_margin_tokens": 128,
+  "input_micros_per_million": 1000000,
+  "output_micros_per_million": 4000000,
+  "retention_mode": "metadata_only",
+  "currency": "CNY"
+}
