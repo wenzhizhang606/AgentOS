@@ -1,13 +1,14 @@
 """HTTP ingress for the pinned, single-worker read-only support profile."""
 
 from datetime import datetime
+from importlib.resources import files
 import re
 from typing import Annotated, Literal, Protocol
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, Request, Response
+from fastapi import Depends, FastAPI, Header, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.exceptions import HTTPException
@@ -23,6 +24,10 @@ class TaskStore(Protocol):
     def cancel_task(self, tenant_id, subject_id, task_id, idempotency_key,
                     expected_version, *, allowed_projects) -> dict: ...
     def get_snapshot(self, tenant_id, subject_id, snapshot_id, *, allowed_projects) -> dict: ...
+    def get_monitoring(self, tenant_id, subject_id, project_id, *, allowed_projects,
+                       include_all_subjects, hours, limit) -> dict: ...
+    def get_timeline(self, tenant_id, subject_id, task_id, *, allowed_projects,
+                     monitor_project_ids) -> dict: ...
 
 
 class Budget(BaseModel):
@@ -79,7 +84,8 @@ def error_response(request: Request, status: int, code: str, message: str) -> JS
     )
 
 
-def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id: str) -> FastAPI:
+def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id: str,
+               *, capability_catalog=()) -> FastAPI:
     app = FastAPI(title="AgentOS M1", version="1")
 
     @app.middleware("http")
@@ -127,6 +133,16 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
             raise PlatformError("INVALID_ARGUMENT", "If-Match is out of range")
         return result
 
+    @app.get("/monitor", response_class=HTMLResponse, include_in_schema=False)
+    def dashboard():
+        page = files("agentos.observability").joinpath("dashboard.html").read_text(encoding="utf-8")
+        return HTMLResponse(page, headers={
+            "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; "
+                                       "style-src 'unsafe-inline'; connect-src 'self'; "
+                                       "frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+            "Referrer-Policy": "no-referrer",
+        })
+
     @app.post("/v1/tasks", status_code=202)
     def submit(body: CreateTask, identity: Annotated[Identity, Depends(authenticate)],
                operation: Annotated[str, Depends(idempotency_key)]):
@@ -163,5 +179,24 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
     def get_snapshot(snapshot_id: str, identity: Annotated[Identity, Depends(authenticate)]):
         return store.get_snapshot(identity.tenant_id, identity.subject_id, snapshot_id,
                                   allowed_projects=identity.project_ids)
+
+    @app.get("/v1/projects/{project_id}/monitoring")
+    def project_monitoring(project_id: str, identity: Annotated[Identity, Depends(authenticate)],
+                           hours: Annotated[int, Query(ge=1, le=168)] = 24,
+                           limit: Annotated[int, Query(ge=1, le=200)] = 50):
+        if project_id not in identity.project_ids:
+            raise PlatformError("FORBIDDEN", "Project outside credential scope")
+        overview = store.get_monitoring(identity.tenant_id, identity.subject_id, project_id,
+                                        allowed_projects=identity.project_ids,
+                                        include_all_subjects=project_id in identity.monitor_project_ids,
+                                        hours=hours, limit=limit)
+        return {**overview, "active_release": {"version_id": agent_version_id,
+                                              "capabilities": capability_catalog}}
+
+    @app.get("/v1/tasks/{task_id}/timeline")
+    def task_timeline(task_id: str, identity: Annotated[Identity, Depends(authenticate)]):
+        return store.get_timeline(identity.tenant_id, identity.subject_id, task_id,
+                                  allowed_projects=identity.project_ids,
+                                  monitor_project_ids=identity.monitor_project_ids)
 
     return app

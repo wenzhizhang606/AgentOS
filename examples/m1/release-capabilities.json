@@ -1,0 +1,33 @@
+{
+  "endpoint": "https://model.example.invalid/v1/chat/completions",
+  "model": "replace-with-pinned-deployment",
+  "window_tokens": 8192,
+  "max_output_tokens": 512,
+  "safety_margin_tokens": 128,
+  "input_micros_per_million": 1000000,
+  "output_micros_per_million": 4000000,
+  "retention_mode": "metadata_only",
+  "currency": "CNY",
+  "capabilities": [
+    {
+      "kind": "tool",
+      "name": "knowledge.search",
+      "version": "1.0.0",
+      "owner": "support-platform",
+      "source": "builtin:lexical-search",
+      "license": "MIT",
+      "implementation": "lexical_search/1",
+      "limit": 5
+    },
+    {
+      "kind": "skill",
+      "name": "support.answer",
+      "version": "1.0.0",
+      "owner": "support-platform",
+      "source": "profile:support-answer",
+      "license": "MIT",
+      "text": "先用一句话回答问题，再列出适用条件；每项政策说明都标注对应的证据编号。",
+      "requires": [{"name": "knowledge.search", "version": "1.0.0"}]
+    }
+  ]
+}

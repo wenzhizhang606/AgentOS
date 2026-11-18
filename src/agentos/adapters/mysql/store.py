@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
 import os
+import re
 import time
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ import pymysql
 from pymysql.cursors import DictCursor
 
 from agentos.contracts.errors import PlatformError
+from agentos.adapters.mysql import monitor
 
 
 TERMINAL = {"cancelled", "failed", "succeeded", "timed_out"}
@@ -34,6 +36,15 @@ def _amount(value):
     if type(value) is not int or not 0 <= value < 2**63:
         raise _error("INVALID_ARGUMENT")
     return value
+
+
+def _capability_key(kind, name, version, digest):
+    if (kind not in ("tool", "skill")
+            or not all(isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", value)
+                       for value in (name, version))
+            or not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest)):
+        raise _error("INVALID_ARGUMENT")
+    return kind, name, version, digest
 
 
 def _timestamp(value):
@@ -102,6 +113,29 @@ def _check_refs(cur, row, refs):
         if (not source or source["deleted"] or source["version"] != ref["version"]
                 or source["location"] != ref["location"]):
             raise _error("CONTEXT_STALE")
+
+
+def _check_capabilities(cur, row, snapshot):
+    release = _one(cur, "SELECT manifest FROM ag_release WHERE version_id=%s", (row["agent_version_id"],))
+    entries = json.loads(release["manifest"]).get("capabilities", []) if release else []
+    fields = ("kind", "name", "version", "digest")
+    expected = [{key: cap[key] for key in fields} for cap in entries]
+    text_hashes = {cap["name"]: cap["text_sha256"] for cap in entries if cap["kind"] == "skill"}
+    if snapshot.get("capability_refs", []) != expected or snapshot.get("skill_text_sha256", {}) != text_hashes:
+        raise _error("CONTEXT_STALE")
+    if not entries:
+        return
+    parent = _one(cur, """SELECT span_id FROM ag_capability_span WHERE task_id=%s AND lease_epoch=%s
+                          AND kind='context' AND outcome='succeeded' AND snapshot_id=%s""",
+                  (row["task_id"], row["lease_epoch"], snapshot["snapshot_id"]))
+    if not parent:
+        raise _error("CONTEXT_STALE")
+    cur.execute("""SELECT kind,name,version,digest,outcome FROM ag_capability_span WHERE parent_span_id=%s""",
+                (parent["span_id"],))
+    children = cur.fetchall()
+    observed = sorted(tuple(span[k] for k in fields) for span in children if span["outcome"] == "succeeded")
+    if len(observed) != len(children) or observed != sorted(tuple(ref[k] for k in fields) for ref in expected):
+        raise _error("CONTEXT_STALE")
 
 
 def _view(cur, row):
@@ -215,8 +249,25 @@ class MySQLStore:
         encoded = _json(manifest)
         if sha256(encoded.encode("utf-8")).hexdigest() != version_id:
             raise _error("INVALID_ARGUMENT")
+        declared = manifest.get("capabilities", [])
+        if not isinstance(declared, list) or not all(isinstance(item, dict) for item in declared):
+            raise _error("INVALID_ARGUMENT")
+        keys = [_capability_key(*(item.get(k) for k in ("kind", "name", "version", "digest"))) for item in declared]
+        if len({key[:3] for key in keys}) != len(keys):
+            raise _error("INVALID_ARGUMENT")
+        for item in declared:
+            if item["kind"] == "skill" and not (
+                    isinstance(item.get("text_sha256"), str) and re.fullmatch(r"[a-f0-9]{64}", item["text_sha256"])):
+                raise _error("INVALID_ARGUMENT")
 
         def work(cur):
+            for key in sorted(keys):
+                cur.execute("""INSERT INTO ag_capability_version (kind,name,version,digest) VALUES (%s,%s,%s,%s)
+                               ON DUPLICATE KEY UPDATE digest=digest""", key)
+                record = _one(cur, """SELECT digest FROM ag_capability_version
+                                      WHERE kind=%s AND name=%s AND version=%s FOR UPDATE""", key[:3])
+                if record["digest"] != key[3]:
+                    raise _error("VERSION_CONFLICT")
             cur.execute("""INSERT INTO ag_release (version_id,manifest,registered_at)
                            VALUES (%s,%s,UTC_TIMESTAMP(6)) ON DUPLICATE KEY UPDATE version_id=version_id""",
                         (version_id, encoded))
@@ -309,6 +360,97 @@ class MySQLStore:
 
     def get_task(self, tenant_id, subject_id, task_id, *, allowed_projects=None):
         return self._tx(lambda cur: _view(cur, _owned(cur, tenant_id, subject_id, task_id, allowed_projects)))
+
+    def start_capability(self, task, kind, name, version, digest, *, parent_span_id=None):
+        if kind != "context":
+            _capability_key(kind, name, version, digest)
+        span_id = uuid4().hex
+
+        def work(cur):
+            scope = tuple(task[key] for key in ("tenant_id", "project_id", "subject_id"))
+            _policy(cur, *scope)
+            row = _task(cur, task["task_id"])
+            _lease(cur, row, task)
+            if tuple(row[key] for key in ("tenant_id", "project_id", "subject_id")) != scope:
+                raise _error("FORBIDDEN")
+            if kind == "context":
+                if (name, version, digest) != ("prepare_context", "evidence/1", row["agent_version_id"]):
+                    raise _error("VERSION_CONFLICT")
+            else:
+                release = _one(cur, "SELECT manifest FROM ag_release WHERE version_id=%s", (row["agent_version_id"],))
+                entries = json.loads(release["manifest"]).get("capabilities", []) if release else []
+                if not any((kind, name, version, digest) == tuple(item[k] for k in ("kind","name","version","digest"))
+                           for item in entries):
+                    raise _error("FORBIDDEN")
+            if parent_span_id is not None:
+                parent = _one(cur, """SELECT span_id FROM ag_capability_span WHERE task_id=%s AND span_id=%s
+                                      AND lease_epoch=%s AND kind='context' AND outcome='started'""",
+                              (row["task_id"], parent_span_id, row["lease_epoch"]))
+                if not parent:
+                    raise _error("STATE_CONFLICT")
+            cur.execute("""INSERT INTO ag_capability_span (span_id,parent_span_id,task_id,attempt,worker_id,
+                           lease_epoch,kind,name,version,digest,outcome,started_at)
+                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'started',UTC_TIMESTAMP(6))""",
+                        (span_id, parent_span_id, row["task_id"], row["attempt"], row["worker_id"],
+                         row["lease_epoch"], kind, name, version, digest))
+            return span_id
+        return self._tx(work)
+
+    def finish_capability(self, task, span_id, *, error_code=None, snapshot_id=None):
+        # Only a stable error category can enter telemetry (no exception text or arguments).
+        if error_code is not None and error_code not in monitor.CAPABILITY_ERRORS:
+            error_code = "CAPABILITY_FAILED"
+        if snapshot_id is not None and not (
+                isinstance(snapshot_id, str) and re.fullmatch(r"[0-9a-fA-F-]{32,36}", snapshot_id)):
+            raise _error("INVALID_ARGUMENT")
+        outcome = "succeeded" if error_code is None else "failed"
+
+        def work(cur):
+            row = _task(cur, task["task_id"])
+            span = _one(cur, """SELECT * FROM ag_capability_span WHERE task_id=%s AND span_id=%s FOR UPDATE""",
+                        (row["task_id"], span_id))
+            if not span or (span["worker_id"], span["lease_epoch"]) != (task["worker_id"], task["lease_epoch"]):
+                raise _error("LEASE_LOST")
+            if snapshot_id is not None and (span["kind"] != "context" or outcome != "succeeded"):
+                raise _error("INVALID_ARGUMENT")
+            if span["outcome"] != "started":
+                if (span["outcome"], span["error_code"], span["snapshot_id"]) != (outcome, error_code, snapshot_id):
+                    raise _error("STATE_CONFLICT")
+                return
+            _lease(cur, row, task)
+            cur.execute("""UPDATE ag_capability_span SET outcome=%s,error_code=%s,snapshot_id=%s,
+                           ended_at=UTC_TIMESTAMP(6) WHERE span_id=%s""", (outcome, error_code, snapshot_id, span_id))
+        self._tx(work)
+
+    def get_timeline(self, tenant_id, subject_id, task_id, *, allowed_projects, monitor_project_ids=()):
+        def work(cur):
+            scope = _one(cur, "SELECT project_id FROM ag_task WHERE tenant_id=%s AND task_id=%s",
+                         (tenant_id, task_id))
+            if not scope or scope["project_id"] not in allowed_projects:
+                raise _error("RESOURCE_NOT_FOUND")
+            if scope["project_id"] in monitor_project_ids:
+                try:
+                    _policy(cur, tenant_id, scope["project_id"], subject_id)
+                except PlatformError:
+                    raise _error("RESOURCE_NOT_FOUND") from None
+                row = _task(cur, task_id)
+            else:
+                row = _owned(cur, tenant_id, subject_id, task_id, allowed_projects)
+            return monitor.timeline(cur, row)
+        return self._tx(work)
+
+    def get_monitoring(self, tenant_id, subject_id, project_id, *, allowed_projects,
+                       include_all_subjects=False, hours=24, limit=50):
+        if project_id not in allowed_projects:
+            raise _error("FORBIDDEN")
+        if type(hours) is not int or not 1 <= hours <= 168 or type(limit) is not int or not 1 <= limit <= 200:
+            raise _error("INVALID_ARGUMENT")
+
+        def work(cur):
+            _policy(cur, tenant_id, project_id, subject_id)
+            return monitor.project_report(cur, tenant_id, project_id, None if include_all_subjects else subject_id,
+                                          _now(cur), hours, limit)
+        return self._tx(work)
 
     def cancel_task(self, tenant_id, subject_id, task_id, idempotency_key, expected_version, *, allowed_projects=None):
         key = _id(idempotency_key)
@@ -420,6 +562,7 @@ class MySQLStore:
                     or snapshot["authorization_revision"] != epoch):
                 raise _error("CONTEXT_STALE")
             _check_refs(cur, row, snapshot["source_refs"])
+            _check_capabilities(cur, row, snapshot)
             if _one(cur, "SELECT task_id FROM ag_dispatch WHERE task_id=%s", (row["task_id"],)):
                 raise _error("EXTERNAL_OUTCOME_UNKNOWN")
             if row["settled_micros"] + row["reserved_micros"] + reserve_micros > row["limit_micros"]:

@@ -110,15 +110,24 @@ class ChatModel:
         # Check their order and coordinates against the actual serialized items.
         try:
             payload = json.loads(prepared.body)
-            evidence = json.loads(payload["messages"][1]["content"])["evidence"]
+            user_input = json.loads(payload["messages"][1]["content"])
+            evidence = user_input["evidence"]
             fields = ("source_id", "version", "location", "label")
             actual = [tuple(item[key] for key in fields) for item in evidence]
             authorized = [tuple(ref[key] for key in fields) for ref in snapshot["source_refs"]]
+            skills = user_input.get("skills", [])
+            pinned = [ref for ref in snapshot.get("capability_refs", []) if ref["kind"] == "skill"]
+            identity = ("kind", "name", "version", "digest")
+            wire_refs = [{key: skill[key] for key in identity} for skill in skills]
+            text_digests = {skill["name"]: sha256(skill["text"].encode("utf-8")).hexdigest()
+                            for skill in skills if skill["trust"] == "profile_guidance"}
+            if wire_refs != pinned or text_digests != snapshot.get("skill_text_sha256", {}):
+                raise ValueError
             if (actual != authorized or not actual or payload["model"] != snapshot["model"]
                     or payload["max_tokens"] != snapshot["budget"]["reserved_output_tokens"]):
                 raise ValueError
-        except (ValueError, TypeError, KeyError, IndexError, RecursionError) as exc:
-            raise ModelNotSent("CONTEXT_STALE", "Wire evidence or limits differ from admitted manifest") from exc
+        except (ValueError, TypeError, AttributeError, KeyError, IndexError, RecursionError) as exc:
+            raise ModelNotSent("CONTEXT_STALE", "Wire context or limits differ from admitted manifest") from exc
         request = Request(self.endpoint, method="POST", data=prepared.body, headers={
             "Content-Type": "application/json", "Accept": "application/json",
             "Authorization": "Bearer " + self._api_key,

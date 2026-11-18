@@ -4,6 +4,8 @@ AgentOS 是以上下文管理为核心的企业 Agent 中台，底层权威数�
 
 ## 已确认的代码结构
 
+当前支持在同一发布中配置文本 Skill 和内置只读 Tool。启动 API 后通过 `/monitor` 查看项目汇总与单任务时间线。接入示例、迁移顺序、权限和监控口径见 [Skill、Tool 与项目监控](docs/changes/capability-monitoring.md)。
+
 | 路径 | 职责 |
 | --- | --- |
 | `src/agentos/api/`、`worker/` | 两个进程入口。API 受理与查询任务；worker 接续持久任务，调用领域模块。表中后续 Python 包名均相对 `src/agentos/`。 |

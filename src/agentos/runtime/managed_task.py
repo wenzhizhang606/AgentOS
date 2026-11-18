@@ -7,6 +7,7 @@ from agentos.context.service import prepare_context
 from agentos.contracts.errors import PlatformError
 from agentos.control.release import Release
 from agentos.gateways.model.client import ModelNotSent, ModelOutputError
+from agentos.observability.capabilities import observe
 
 
 log = logging.getLogger(__name__)
@@ -26,15 +27,24 @@ def _finish(store, task, dispatch_id, result, charge, receipt_id, input_tokens=0
 
 
 def _prepare_and_admit(store, task, release):
-    epoch, sources = store.evidence(task)
-    prepared = prepare_context(
-        task_id=task["task_id"], question=task["goal"], candidates=sources,
-        model=release.model, window_tokens=release.window_tokens,
-        output_tokens=release.max_output_tokens, safety_margin_tokens=release.safety_margin_tokens,
-        retention_mode=release.retention_mode, release_id=release.version_id,
-        destination=release.endpoint, attempt=task["attempt"],
-        identity_ref=task["subject_id"], authorization_revision=epoch,
-    )
+    def prepare(parent_span_id):
+        def observe_capability(meta, action):
+            return observe(store, task, meta, lambda _: action(), parent_span_id=parent_span_id)
+
+        epoch, sources = store.evidence(task)
+        return prepare_context(
+            task_id=task["task_id"], question=task["goal"], candidates=sources,
+            model=release.model, window_tokens=release.window_tokens,
+            output_tokens=release.max_output_tokens, safety_margin_tokens=release.safety_margin_tokens,
+            retention_mode=release.retention_mode, release_id=release.version_id,
+            destination=release.endpoint, attempt=task["attempt"],
+            identity_ref=task["subject_id"], authorization_revision=epoch,
+            capabilities=release.capabilities, observe=observe_capability,
+        )
+
+    meta = {"kind": "context", "name": "prepare_context", "version": "evidence/1",
+            "digest": release.version_id}
+    prepared = observe(store, task, meta, prepare)
     start = time.monotonic()
     permit = store.admit(task, prepared.snapshot, release.reservation_micros, prepared.retained_payload)
     return prepared, permit["dispatch_attempt_id"], start + float(permit["valid_for_seconds"])

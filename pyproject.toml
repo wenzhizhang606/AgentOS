@@ -23,6 +23,9 @@ agentos = "agentos.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"agentos.observability" = ["dashboard.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["mysql: uses an explicitly configured MySQL test database"]

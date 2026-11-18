@@ -69,6 +69,40 @@ def test_ac_001_ac_012_submit_derives_identity_from_bearer(client_store, task):
     }, replay_only=False)
 
 
+def test_ac_013_monitoring_uses_server_side_scope(client_store):
+    client, store = client_store
+    store.get_monitoring.return_value = {"scope": "subject"}
+    response = client.get("/v1/projects/support/monitoring?include_all_subjects=true", headers=HEADERS)
+    assert response.status_code == 200 and response.json()["scope"] == "subject"
+    store.get_monitoring.assert_called_once_with("tenant-A", "alice", "support",
+                                                 allowed_projects=("support",), include_all_subjects=False,
+                                                 hours=24, limit=50)
+    assert client.get("/v1/projects/payroll/monitoring", headers=HEADERS).status_code == 403
+    assert client.get("/v1/projects/support/monitoring?hours=169", headers=HEADERS).status_code == 400
+    assert store.get_monitoring.call_count == 1
+
+
+def test_ac_013_monitoring_grant_is_project_scoped(tmp_path, credential):
+    credential["monitor_project_ids"] = ["payroll"]
+    with pytest.raises(ValueError):
+        load_credentials(tmp_path, [credential])
+    credential["monitor_project_ids"] = ["support"]
+    auth = load_credentials(tmp_path, [credential])
+    store = Mock(spec=TaskStore)
+    store.get_monitoring.return_value = {"scope": "project"}
+    store.get_timeline.return_value = {"events": []}
+    catalog = [{"kind": "skill", "name": "guidance", "version": "1", "digest": "b" * 64}]
+    with TestClient(create_app(store, auth, RELEASE, capability_catalog=catalog)) as client:
+        info = client.get("/v1/projects/support/monitoring?hours=12&limit=10", headers=HEADERS).json()
+        assert info["active_release"] == {"version_id": RELEASE, "capabilities": catalog}
+        assert store.get_monitoring.call_args.kwargs == {
+            "allowed_projects": ("support",), "include_all_subjects": True, "hours": 12, "limit": 10,
+        }
+        assert client.get("/v1/tasks/t1/timeline", headers=HEADERS).status_code == 200
+        store.get_timeline.assert_called_once_with("tenant-A", "alice", "t1", allowed_projects=("support",),
+                                                   monitor_project_ids=("support",))
+
+
 @pytest.mark.parametrize("authorization", [None, "Basic arbitrary", "Bearer invalid"])
 def test_ac_012_invalid_credentials_never_reach_store(client_store, task, authorization):
     client, store = client_store

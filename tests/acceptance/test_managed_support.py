@@ -5,6 +5,7 @@ from hashlib import sha256
 from io import BytesIO
 import json
 import os
+from pathlib import Path
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -25,11 +26,15 @@ pytestmark = [pytest.mark.mysql, pytest.mark.skipif(os.getenv("AGENTOS_TEST_MYSQ
 
 
 @pytest.fixture
-def deployment():
+def deployment(request):
     store = MySQLStore.from_env()
     tenant = uuid4().hex
+    config = {}
+    if getattr(request, "param", None) == "with_capabilities":
+        sample = Path(__file__).resolve().parents[2] / "examples/m1/release-capabilities.json"
+        config["capabilities"] = json.loads(sample.read_text(encoding="utf-8"))["capabilities"]
     release = Release("https://model.example.invalid/v1/chat/completions", tenant, 8192,
-                      128, 64, 1_000_000, 2_000_000, "metadata_only")
+                      128, 64, 1_000_000, 2_000_000, "metadata_only", **config)
     token = uuid4().hex
     now = datetime.now(timezone.utc)
     identity = Identity(tenant, "operator", ("support",), now + timedelta(hours=1))
@@ -37,14 +42,15 @@ def deployment():
     store.register_release(release.version_id, release.manifest)
     store.set_access(tenant, "operator", "support", True)
     store.put_source(tenant, "support", "return-policy", "售后政策", "签收后七天内可退货。", "section-1")
-    client = TestClient(create_app(store, auth, release.version_id))
+    client = TestClient(create_app(store, auth, release.version_id,
+                                   capability_catalog=release.catalog_metadata()))
     client.headers.update({"Authorization": "Bearer " + token})
-    request = {"agent_version_id": release.version_id, "project_id": "support",
+    body = {"agent_version_id": release.version_id, "project_id": "support",
                "goal": "售后政策允许多少天内退货？", "completion_criteria_ref": "criteria_support_readonly_v1",
                "deadline_at": (now + timedelta(minutes=5)).isoformat().replace("+00:00", "Z"),
                "budget": {"currency": "CNY", "limit_micros": 10000}}
     with client:
-        yield store, release, identity, client, request
+        yield store, release, identity, client, body
 
 
 class Model:
@@ -63,6 +69,43 @@ def submit(client, request):
     response = client.post("/v1/tasks", headers={"Idempotency-Key": "create"}, json=request)
     assert response.status_code == 202, response.text
     return response.json()["task_id"]
+
+
+@pytest.mark.parametrize("deployment", ["with_capabilities"], indirect=True)
+def test_ac_013_023_trace_from_skill_and_tool_to_settled_model(deployment):
+    store, release, _, client, request = deployment
+    task_id = submit(client, request)
+    model = ChatModel(release.endpoint, "fixture-key")
+    model._transport = Mock()
+    reply = {"id": "observed-receipt", "usage": {"prompt_tokens": 100, "completion_tokens": 10},
+             "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "七天 [E1]"}}]}
+    model._transport.open.return_value = BytesIO(json.dumps(reply).encode())
+    assert run_one(store, model, release, "traced-worker")
+    sent = json.loads(model._transport.open.call_args.args[0].data)
+    model_input = json.loads(sent["messages"][1]["content"])
+    assert model_input["skills"][0]["name"] == "support.answer"
+
+    task_url = "/v1/tasks/" + task_id
+    task = client.get(task_url).json()
+    assert task["state"] == "succeeded"
+    snapshot = client.get("/v1/context-snapshots/" + task["snapshot_id"]).json()
+    assert snapshot["capability_refs"] == release.catalog_metadata()
+    response = client.get(task_url + "/timeline")
+    assert response.status_code == 200
+    events = response.json()["events"]
+    context, = [e for e in events if e["kind"] == "context" and e["event"] == "succeeded"]
+    assert context["snapshot_id"] == task["snapshot_id"]
+    successful = [e for e in events if e["kind"] in {"skill", "tool"} and e["event"] == "succeeded"]
+    assert {e["digest"] for e in successful} == {c["digest"] for c in release.catalog_metadata()}
+    assert all(e["parent_span_id"] == context["span_id"] for e in successful)
+    assert model_input["skills"][0]["text"] not in response.text
+    assert request["goal"] not in response.text
+    assert any(e["event"] == "receipt_settled" and e["dispatch_attempt_id"] == task["dispatch_attempt_id"]
+               for e in events)
+    overview = client.get("/v1/projects/support/monitoring").json()
+    assert overview["summary"]["tasks_with_spans"] == overview["summary"]["dispatches"] == 1
+    assert overview["summary"]["settled_micros"] == "120"
+    assert overview["active_release"]["capabilities"] == release.catalog_metadata()
 
 
 def test_ac_001_009_012_answer_charge_and_withdrawal(deployment):

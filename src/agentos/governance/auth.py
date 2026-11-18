@@ -16,6 +16,7 @@ class Identity:
     subject_id: str
     project_ids: tuple[str, ...]
     expires_at: datetime
+    monitor_project_ids: tuple[str, ...] = ()
 
 
 class Authenticator:
@@ -41,12 +42,17 @@ class Authenticator:
                 raise ValueError("A credential has an empty or invalid scope")
             for item in identifiers:
                 item.encode("utf-8")
+            monitoring = record.get("monitor_project_ids", [])
+            if not isinstance(monitoring, list) or any(
+                    not isinstance(project, str) or project not in projects for project in monitoring):
+                raise ValueError("Monitoring projects must be within the credential's project scope")
             expires = record["expires_at"]
             if not re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?Z", expires):
                 raise ValueError("Credential expiry must be a UTC timestamp ending in Z")
             credentials[digest] = Identity(
                 record["tenant_id"], record["subject_id"], tuple(projects),
                 datetime.fromisoformat(expires[:-1] + "+00:00"),
+                tuple(monitoring),
             )
         return cls(credentials)
 

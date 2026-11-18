@@ -1,12 +1,14 @@
 """The read-only support profile and its immutable deployment configuration."""
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, fields
 from functools import lru_cache
 import hashlib
 from importlib.resources import files
 import json
 from pathlib import Path
 from urllib.parse import urlsplit
+
+from agentos.control.capabilities import Capability, parse_capabilities
 
 
 @lru_cache(maxsize=1)
@@ -17,6 +19,9 @@ def _components():
         "control/release.py", "api/app.py", "governance/auth.py", "runtime/managed_task.py",
         "worker/service.py", "knowledge/retrieval.py", "context/service.py",
         "gateways/model/client.py", "adapters/mysql/store.py", "contracts/errors.py",
+        "control/capabilities.py", "gateways/tool/registry.py", "gateways/tool/evidence.py",
+        "observability/capabilities.py",
+        "adapters/mysql/monitor.py",
     )
     return tuple((name, hashlib.sha256(root.joinpath(*name.split("/")).read_text(
         encoding="utf-8").encode("utf-8")).hexdigest()) for name in paths)
@@ -33,8 +38,14 @@ class Release:
     output_micros_per_million: int
     retention_mode: str
     currency: str = "CNY"
+    capabilities: tuple[Capability, ...] = ()
 
     def __post_init__(self):
+        if isinstance(self.capabilities, list):
+            object.__setattr__(self, "capabilities", parse_capabilities(self.capabilities))
+        elif not isinstance(self.capabilities, tuple) or any(
+                not isinstance(cap, Capability) for cap in self.capabilities):
+            raise ValueError("Expected a release capability array")
         if not isinstance(self.endpoint, str) or not self.endpoint.isascii() or any(
                 ord(char) <= 32 or ord(char) == 127 for char in self.endpoint):
             raise ValueError("Configure an ASCII HTTPS URL with escaped path characters")
@@ -63,9 +74,16 @@ class Release:
 
     @property
     def manifest(self) -> dict:
-        return {"profile": "readonly-support/1", "retrieval": "lexical/1",
+        config = {f.name: getattr(self, f.name) for f in fields(self) if f.name != "capabilities"}
+        if self.capabilities:
+            config["capabilities"] = [cap.manifest() for cap in self.capabilities]
+        retrieval = next((cap.implementation for cap in self.capabilities if cap.kind == "tool"), "lexical/1")
+        return {"profile": "readonly-support/1", "retrieval": retrieval,
                 "context": "evidence/1", "gateway": "chat-completions/1",
-                "components_sha256": dict(_components()), **asdict(self)}
+                "components_sha256": dict(_components()), **config}
+
+    def catalog_metadata(self) -> list[dict]:
+        return [cap.metadata() for cap in self.capabilities]
 
     @property
     def version_id(self) -> str:

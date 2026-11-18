@@ -13,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(prog="agentos")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("release-id", help="print the immutable configured release ID")
+    commands.add_parser("capabilities", help="show the capabilities pinned by the release file")
     score = commands.add_parser("score", help="score observations against the M1 fixture")
     score.add_argument("cases", type=Path)
     score.add_argument("observations", type=Path)
@@ -49,8 +50,12 @@ def main():
         print(json.dumps(score_files(args.cases, args.observations), ensure_ascii=False, indent=2))
         return
     release = None
-    if args.command in {"release-id", "api", "worker"}:
+    if args.command in {"release-id", "capabilities", "api", "worker"}:
         release = Release.load(os.environ["AGENTOS_RELEASE_FILE"])
+    if args.command == "capabilities":
+        print(json.dumps({"release_id": release.version_id, "capabilities": release.catalog_metadata()},
+                         ensure_ascii=False, indent=2))
+        return
     if args.command == "release-id":
         print(release.version_id)
         return
@@ -66,7 +71,8 @@ def main():
         from agentos.governance.auth import Authenticator
 
         auth = Authenticator.from_file(os.environ["AGENTOS_CREDENTIALS_FILE"])
-        uvicorn.run(create_app(store, auth, release.version_id), host=args.host, port=args.port)
+        app = create_app(store, auth, release.version_id, capability_catalog=release.catalog_metadata())
+        uvicorn.run(app, host=args.host, port=args.port)
     elif args.command == "worker":
         from agentos.gateways.model.client import ChatModel
         from agentos.worker.service import serve
