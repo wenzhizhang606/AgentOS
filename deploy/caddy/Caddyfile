@@ -1,18 +1,19 @@
 {
 	admin off
+	auto_https disable_redirects
 	default_sni {$AGENTOS_PUBLIC_IP}
-	servers :443 {
+	servers {
 		protocols h1 h2
 	}
 }
 
-https://{$AGENTOS_PUBLIC_IP} {
+https://{$AGENTOS_PUBLIC_IP}:8000, https://{$AGENTOS_PUBLIC_IP} {
 	tls {
 		issuer acme https://acme-v02.api.letsencrypt.org/directory {
 			profile shortlived
+			disable_http_challenge
 		}
 	}
-
 	@home {
 		method GET HEAD
 		path /
@@ -20,12 +21,12 @@ https://{$AGENTOS_PUBLIC_IP} {
 
 	@dashboard {
 		method GET HEAD
-		path /monitor
+		path /monitor /resources
 	}
 
 	@observations {
 		method GET
-		path_regexp observers ^/v1/(projects/[^/]+/(monitoring|agents(/[^/]+/runs)?)|tasks/[^/]+/(timeline|runs/[1-9][0-9]*/trace))$
+		path_regexp observers ^/v1/(projects/[^/]+/(monitoring|resources|agents(/[^/]+/runs)?)|tasks/[^/]+/(timeline|runs/[1-9][0-9]*/trace))$
 	}
 	route {
 		redir @home /monitor 302

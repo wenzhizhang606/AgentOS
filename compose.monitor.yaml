@@ -1,4 +1,7 @@
 services:
+  api:
+    ports: !override
+      - "127.0.0.1:${AGENTOS_PRIVATE_API_PORT:-18080}:8000"
   monitor-gateway:
     image: caddy:2.11.9-alpine
     restart: unless-stopped
@@ -10,7 +13,7 @@ services:
     environment:
       AGENTOS_PUBLIC_IP: ${AGENTOS_PUBLIC_IP:?Set the public monitor IP address}
     ports:
-      - "80:80"
+      - "8000:8000"
       - "443:443"
     volumes:
       - type: bind

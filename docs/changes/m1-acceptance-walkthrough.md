@@ -6,7 +6,7 @@
 
 ## 在 Windows 上打开服务器监控
 
-在仓库根目录打开 PowerShell。从本机私有 SFTP 配置取得 SSH 目标，使用你已有的 SSH 登录方式。下例使用当前部署目录、远端默认端口 8000 和本机端口 18000。
+在仓库根目录打开 PowerShell。从本机私有 SFTP 配置取得 SSH 目标，使用你已有的 SSH 登录方式。下例针对已开启公网监控网关的部署，从本机 18000 转发至服务器的私有 API 端口 18080。仅运行基础 Compose 时，将隧道目标端口改为 8000。
 
 ```powershell
 $site = Get-Content -Raw -Encoding utf8 .vscode/sftp.json | ConvertFrom-Json
@@ -22,7 +22,7 @@ $projectToken = ssh @sshArgs $target 'cat /root/agentos/local/test-observer.toke
 if ($LASTEXITCODE -ne 0 -or -not $projectToken) { throw '请取得当前验收项目的有效访问令牌' }
 Set-Clipboard -Value $projectToken.Trim()
 Remove-Variable projectToken
-ssh @sshArgs -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18000:127.0.0.1:8000 $target
+ssh @sshArgs -N -o ExitOnForwardFailure=yes -L 127.0.0.1:18000:127.0.0.1:18080 $target
 ```
 
 1. 确认 MySQL、API、worker 均为 `healthy`，迁移容器以 `0` 退出，两行发布 ID 相同。保持隧道窗口打开。另开终端运行 `curl.exe -fsS http://127.0.0.1:18000/readyz`，应返回 HTTP 200。

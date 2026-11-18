@@ -233,6 +233,8 @@ MySQL 的原子 DDL 不等于事务式 DDL。Schema 变更、数据回填和发�
 
 ## HTTP 入口与错误处理
 
+M1 的 `GET /resources` 和 `GET /monitor` 提供公开登录页面。读取资源目录使用 `GET /v1/projects/{project_id}/resources`，每次检查 Bearer 身份、项目范围和当前 MySQL 成员关系。响应包含 `project_id`、`agent_version_id`、`counts` 和 `resources`。其中 `counts.skill` 与 `counts.tool` 分别等于活动发布里相应类型的资源条目数，空目录返回两个零。每个条目只包含 `kind`、`name`、`version`、`digest`。凭证专用集合 `monitor_credentials` 可读取资源目录与监控元数据，访问任务写入或正文接口返回 403。[配置与统计范围](../changes/capability-monitoring.md)
+
 | 入口 | 用途 | 主要语义 |
 | --- | --- | --- |
 | `POST /v1/tasks` | 创建根任务 | 必填 Idempotency-Key，服务端生成身份与预算账户，返回202及任务引用 |

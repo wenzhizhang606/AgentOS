@@ -4,11 +4,25 @@ AgentOS 是以上下文管理为核心的企业 Agent 中台，底层权威数�
 
 验收当前发布时，可以先在监控页面复查一笔已有运行，再用退货政策验证回答、引用、预算和权限。操作手册提供可复制的命令、逐项通过条件以及业务试点的签字口径。[M1 验收操作手册](docs/changes/m1-acceptance-walkthrough.md)
 
-单机容器部署使用 [Compose 配置](compose.yaml) 启动 MySQL、迁移、API 和独立 worker。监控页面和 API 共用端口，默认地址为 `http://127.0.0.1:8000/monitor`。[部署步骤、接口与探针](docs/changes/docker-deployment.md)
-
-公网监控可使用独立 HTTPS 网关，停用网关后仍可经 SSH 隧道访问。项目概览显示 Tool 和 Skill 调用总数，并支持按版本和单次运行追查。[HTTPS 监控入口](docs/changes/docker-deployment.md#公网-ip-监控入口) · [基准实测与主流 Agent 对照](docs/research/agent-benchmark-comparison.md) · [组件独立发布设计](docs/design/independent-component-release.md)
-
 首次配置时，将根目录的 `.env.example` 复制为 `.env`，填写模型部署名、完整的 Chat Completions API 地址和密钥，并按需调整词法检索参数。API 和 worker 使用相同的模型和检索配置生成发布 ID。[配置模板](.env.example) · [参数与生效方式](docs/changes/model-rag-environment.md)
+
+## 打开监控和资源管理控制台
+
+| 部署方式 | 监控地址 | 端口用途 |
+| --- | --- | --- |
+| 基础 Compose | `http://127.0.0.1:8000/monitor` | API 默认只监听宿主机回环地址 |
+| 叠加公网网关 | `https://<公网 IPv4>:8000/monitor` | TCP 8000 提供监控，TCP 443 支持证书续期和兼容访问，TCP 80 留给其他服务 |
+| 公网部署上的 SSH 隧道 | `http://127.0.0.1:18000/monitor` | 本机 18000 转发到服务器 `127.0.0.1:18080` 的私有 API |
+
+1. 使用管理员提供的项目 ID 和监控访问令牌登录。专用观察令牌记录在部署配置的 `monitor_credentials` 中，只能读取授权范围内的运行元数据。浏览器将令牌保存在当前页面内存中。
+2. **项目概览**展示所选时间内的任务状态分布、Skill 加载、Tool 执行、模型准入次数及已结算费用。时间窗口按任务创建时间筛选，次数统计覆盖窗口内的全部可见任务。
+3. **Agent 运行轨迹**支持按发布版本选择实例，也可直接输入 `任务 ID:尝试号`。瀑布图按同一时间轴显示上下文、Skill、Tool 和模型事件。模型区间从发送准入到费用结算，底部事件表保留精确时间、错误和关联标识。
+
+公网部署需在云安全组放行入站 TCP 8000 和 443。[启动网关与探针](docs/changes/docker-deployment.md#公网-ip-监控入口) · [监控凭证和调用口径](docs/changes/capability-monitoring.md) · [实例查看示例](docs/changes/agent-run-trace.md)
+
+在同一地址打开 `/resources`，或登录后点击顶部「资源管理」，即可看到当前发布启用的 **Skill 数、Tool 数**及每项资源的名称、版本和 SHA-256。目录包含从未调用的资源，按类型筛选只改变列表。需要读取机器可用的清单时，使用同一项目观察令牌访问 `GET /v1/projects/{project_id}/resources`。资源目录随部署的活动发布更新。[资源目录接口](docs/changes/capability-monitoring.md#查看监控)
+
+检索、编码和多 Agent 的已测结果分别列出样本数、评分方式和可比的公开基线。[基准实测与主流 Agent 对照](docs/research/agent-benchmark-comparison.md) · [组件独立发布设计](docs/design/independent-component-release.md)
 
 ## 已确认的代码结构
 

@@ -107,3 +107,7 @@ REQ-EVAL-001/002、AC-014 与 TASK-010 采用三项公开基准，分别评价�
 ## 2026-11-18 · 基准优化、监控入口与独立发布
 
 SciFact 配对验证 BM25 候选，保留旧证据适配器。协作判分从同一批真实回执复算，纠正紧跟句号的有效答案。项目总量来自完整跨度集合，不受版本明细行上限影响。公网网关只代理只读监控所需接口，沿用项目授权。对照 DSH 的进程内插件生命周期，补充组件产物独立发布、组合原子激活、在途任务版本保留和撤权验收。热插拔的实现与压测留在 TASK-008。[基准实测](../research/agent-benchmark-comparison.md) · [组件发布设计](independent-component-release.md)
+
+## 2026-11-18 · 资源目录与调用瀑布图
+
+AC-013 与 AC-023 分别核对统计的来源。资源目录读取当前不可变发布清单，运行监控按实际任务、跨度和模型准入计数。用真实项目与空目录夹具分别验证了完整清单和零值。观察凭证经过有效期、项目范围、实时成员和操作类型校验。公网 8000 提供 HTTPS，测试核实宿主机没有 80 端口监听。浏览器用例涵盖窄屏、切换项目视图、分页、身份撤销和迟到响应。设计参考了阿里云对总览与单次追踪的分层、AWS 的分段时间轴及 Google Cloud 的按 ID 定位。[阿里云可观测链路](https://help.aliyun.com/zh/opentelemetry/quick-start) · [AWS X-Ray](https://docs.aws.amazon.com/xray/latest/devguide/xray-console-traces.html) · [Google Cloud Trace](https://docs.cloud.google.com/trace/docs/finding-traces)

@@ -1,14 +1,15 @@
 # 单机 Docker 部署与观测入口
 
-适用范围为当前 M1 与本地 Skill/Tool 的开发、联调环境。交付覆盖 TASK-001、TASK-009、TASK-013 和 AC-013、AC-017、AC-028 的部分部署行为，状态为待统一验证。
+适用范围为当前 M1 与本地 Skill/Tool 的开发、联调环境。交付覆盖 TASK-001、TASK-009、TASK-013 和 AC-013、AC-017、AC-028 的部分部署行为。2026-11-18 在单机 Docker 上验证了部署端口、API 和 worker 的发布一致性、两个控制台和项目凭证。[审核记录](../design/review-log.md#2026-11-18--资源目录与调用瀑布图)
 
 ## 观测入口
 
-API 默认只发布在宿主机 `127.0.0.1:8000`。业务监控共用这个端口，提供 1 个页面和 5 个只读 API。
+基础 Compose 将 API 绑定到宿主机 `127.0.0.1:8000`。监控与资源管理共用这个入口，提供两个页面和六个只读数据 API。
 
 | 方法和路径 | 可以看到什么 |
 | --- | --- |
 | `GET /monitor` | 输入项目和凭证，查看项目汇总、任务时间线，或按 Agent 发布版本选择一次运行。 |
+| `GET /resources`、`GET /v1/projects/{project_id}/resources` | 查看当前发布启用的 Skill 与 Tool 数量、名称、版本和摘要。 |
 | `GET /v1/projects/{project_id}/monitoring` | 项目内的任务状态、能力清单与实际调用、P95 耗时、Token、已结算费用与待核对回执。 |
 | `GET /v1/tasks/{task_id}/timeline` | 一次任务中的排队和领取、上下文准备、Skill、Tool、模型准入和费用回执。 |
 | `GET /v1/projects/{project_id}/agents` | 在所选时间范围内，有可见运行的 Agent 发布版本。 |
@@ -93,12 +94,12 @@ python -m pytest tests/integration/test_compose_deployment.py
 
 ## 公网 IP 监控入口
 
-单机的可选网关由 Caddy 提供。上线需公网固定 IP，云安全组允许入站 TCP 80、443，并确保两端口由网关使用。80 用于证书验证和 HTTPS 重定向。Caddy 通过 Let's Encrypt 申请并自动续期短期 IP 证书，证书及 ACME 状态持久化在专用卷。API 的宿主机端口仍绑定回环地址，支持原有 SSH 隧道。[Compose 叠加配置](../../compose.monitor.yaml) · [公开路由](../../deploy/caddy/Caddyfile) · [Let's Encrypt IP 证书](https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability)
+叠加配置使用 Compose 2.24.4 或更高版本的 `!override` 替换 API 的端口映射。固定公网 IPv4 的 TCP 8000 由 Caddy 提供 HTTPS 监控。TCP 443 保留给 TLS-ALPN-01 证书续期，并兼容旧 HTTPS 书签。宿主机 80 可供其他应用使用。云安全组应允许入站 TCP 8000 和 443。证书及 ACME 状态使用持久卷。业务 API 只绑定服务器 `127.0.0.1:18080`，可通过 `AGENTOS_PRIVATE_API_PORT` 调整。[Compose 叠加配置](../../compose.monitor.yaml) · [公开路由](../../deploy/caddy/Caddyfile) · [Caddy 证书验证](https://caddyserver.com/docs/automatic-https#tls-alpn-challenge)
 
 ```bash
 export AGENTOS_PUBLIC_IP='<服务器公网 IPv4>'
-docker compose -f compose.yaml -f compose.monitor.yaml up -d monitor-gateway
-curl --fail "https://${AGENTOS_PUBLIC_IP}/monitor" --output /dev/null
+docker compose -f compose.yaml -f compose.monitor.yaml up -d api monitor-gateway
+curl --fail "https://${AGENTOS_PUBLIC_IP}:8000/monitor" --output /dev/null
 ```
 
 网关在 HTTPS 上仅开放监控页面和现有只读监控接口。首页可访问，项目数据继续要求 AgentOS 令牌。在无凭证的浏览器或外部主机上检查监控页面返回 200，项目监控接口返回 401，`POST /v1/tasks` 返回 404。维护时在 Compose 命令中同时指定两份配置，避免把网关视作孤立容器。

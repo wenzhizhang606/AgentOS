@@ -59,6 +59,28 @@ def test_ac010_ac028_compose_passes_release_overrides_and_scopes_model_key(monke
     assert key_recipients == ["worker"]
 
 
+@pytest.mark.parametrize(("configured", "expected"), [("", "18080"), ("18081", "18081")])
+def test_ac013_ac028_monitor_overlay_publishes_only_tls_and_keeps_api_private(monkeypatch, configured, expected):
+    for key in ("MYSQL_ROOT_PASSWORD", "AGENTOS_MIGRATION_PASSWORD",
+                "AGENTOS_MYSQL_PASSWORD", "AGENTOS_MODEL_API_KEY"):
+        monkeypatch.setenv(key, "fixture-only")
+    monkeypatch.setenv("AGENTOS_PUBLIC_IP", "192.0.2.10")
+    monkeypatch.setenv("AGENTOS_PRIVATE_API_PORT", configured)
+    # The overlay must replace, rather than merge with, the base API publication.
+    monkeypatch.setenv("AGENTOS_API_PORT", "19999")
+    services = json.loads(docker("compose", "-f", "compose.yaml", "-f", "compose.monitor.yaml",
+                                 "config", "--format", "json"))["services"]
+    published = {
+        (name, port.get("host_ip") or "0.0.0.0", str(port["published"]), port["target"], port["protocol"])
+        for name, service in services.items() for port in service.get("ports", [])
+    }
+    assert published == {
+        ("api", "127.0.0.1", expected, 8000, "tcp"),
+        ("monitor-gateway", "0.0.0.0", "8000", 8000, "tcp"),
+        ("monitor-gateway", "0.0.0.0", "443", 443, "tcp"),
+    }
+
+
 def test_ac028_compose_services_and_probes():
     for service in ("mysql", "api", "worker"):
         ids = docker("compose", "ps", "--quiet", service).splitlines()

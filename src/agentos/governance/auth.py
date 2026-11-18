@@ -17,6 +17,7 @@ class Identity:
     project_ids: tuple[str, ...]
     expires_at: datetime
     monitor_project_ids: tuple[str, ...] = ()
+    monitor_only: bool = False
 
 
 class Authenticator:
@@ -26,11 +27,16 @@ class Authenticator:
     @classmethod
     def from_file(cls, path: str | Path) -> "Authenticator":
         """Load provisioned token hashes. Configuration errors prevent startup."""
-        records = json.loads(Path(path).read_text(encoding="utf-8"))["credentials"]
-        if not isinstance(records, list) or not records:
+        config = json.loads(Path(path).read_text(encoding="utf-8"))
+        records = config["credentials"]
+        observers = config.get("monitor_credentials", [])
+        if not isinstance(records, list) or not isinstance(observers, list):
+            raise ValueError("Credential collections must be lists")
+        if not records and not observers:
             raise ValueError("At least one credential is required")
         credentials = {}
-        for record in records:
+        observer_digests = {record["token_sha256"] for record in observers}
+        for record in records + observers:
             digest = record["token_sha256"]
             if not re.fullmatch(r"[0-9a-f]{64}", digest) or digest in credentials:
                 raise ValueError("Invalid or duplicate credential hash")
@@ -52,7 +58,7 @@ class Authenticator:
             credentials[digest] = Identity(
                 record["tenant_id"], record["subject_id"], tuple(projects),
                 datetime.fromisoformat(expires[:-1] + "+00:00"),
-                tuple(monitoring),
+                tuple(monitoring), digest in observer_digests,
             )
         return cls(credentials)
 

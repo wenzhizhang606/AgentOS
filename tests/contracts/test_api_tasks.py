@@ -103,6 +103,73 @@ def test_ac_013_monitoring_grant_is_project_scoped(tmp_path, credential):
                                                    monitor_project_ids=("support",))
 
 
+def test_ac_013_023_resources_show_active_release_even_without_activity(tmp_path, credential):
+    store = Mock(spec=TaskStore)
+    store.get_monitoring.return_value = {"summary": {"tasks": 0}}
+    entries = [
+        {"kind": "skill", "name": "guidance", "version": "1", "digest": "a" * 64},
+        {"kind": "tool", "name": "lookup", "version": "2", "digest": "b" * 64},
+        {"kind": "skill", "name": "returns", "version": "3", "digest": "c" * 64},
+    ]
+    catalog = [dict(entry, text="private prompt", auth_ref="private credential") for entry in entries]
+    catalog.append({"kind": "context", "name": "private context"})
+    with TestClient(create_app(store, load_credentials(tmp_path, [credential]), RELEASE,
+                               capability_catalog=catalog)) as client:
+        catalog[0]["version"] = "unpublished"
+        catalog.clear()
+        response = client.get("/v1/projects/support/resources", headers=HEADERS)
+        assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
+        assert response.json() == {"project_id": "support", "agent_version_id": RELEASE,
+                                   "counts": {"skill": 2, "tool": 1}, "resources": entries}
+        store.require_project_access.assert_called_once_with("tenant-A", "alice", "support",
+                                                             allowed_projects=("support",))
+        store.get_monitoring.assert_not_called()
+        report = client.get("/v1/projects/support/monitoring", headers=HEADERS).json()
+        assert report["active_release"] == {"version_id": RELEASE, "capabilities": entries}
+
+
+def test_ac_012_013_resource_endpoints_keep_catalog_private(client_store):
+    client, store = client_store
+    page = client.get("/resources")
+    monitor = client.get("/monitor")
+    assert page.status_code == 200 and page.content == monitor.content and not store.mock_calls
+    for header in ("content-security-policy", "referrer-policy", "cache-control"):
+        assert page.headers[header] == monitor.headers[header]
+    path = "/v1/projects/support/resources"
+    assert client.get(path).status_code == 401
+    assert client.get("/v1/projects/other/resources", headers=HEADERS).status_code == 403
+    assert not store.mock_calls
+    assert client.get(path, headers=HEADERS).json() == {
+        "project_id": "support", "agent_version_id": RELEASE, "counts": {"skill": 0, "tool": 0}, "resources": []}
+    store.require_project_access.side_effect = PlatformError("FORBIDDEN", "Project membership revoked")
+    rejected = client.get(path, headers=HEADERS)
+    assert rejected.status_code == 403 and "resources" not in rejected.json()
+
+
+def test_ac_013_monitor_only_credential_reads_metadata_and_rejects_task_access(tmp_path, credential, task):
+    credential["monitor_project_ids"] = ["support"]
+    path = tmp_path / "credentials.json"
+    path.write_text(json.dumps({"credentials": [], "monitor_credentials": [credential]}), encoding="utf-8")
+    store = Mock(spec=TaskStore)
+    for method in (store.get_monitoring, store.list_observed_agents, store.get_agent_runs,
+                   store.get_timeline, store.get_run_trace):
+        method.return_value = {}
+    with TestClient(create_app(store, Authenticator.from_file(path), RELEASE)) as client:
+        for route in ("/v1/projects/support/monitoring", "/v1/projects/support/resources", "/v1/projects/support/agents",
+                      "/v1/projects/support/agents/ver/runs", "/v1/tasks/t1/timeline", "/v1/tasks/t1/runs/1/trace"):
+            assert client.get(route, headers=HEADERS).status_code == 200
+        store.reset_mock()
+        assert client.get("/v1/projects/other/monitoring", headers=HEADERS).status_code == 403
+        assert client.get("/v1/tasks/t1", headers=HEADERS).status_code == 403
+        assert client.get("/v1/context-snapshots/s1", headers=HEADERS).status_code == 403
+        assert client.post("/v1/tasks", json=task, headers=HEADERS).status_code == 403
+        assert client.post("/v1/tasks/t1/cancel", headers={**HEADERS, "If-Match": "1"}).status_code == 403
+        assert not store.mock_calls
+    path.write_text(json.dumps({"credentials": [credential], "monitor_credentials": [credential]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="duplicate"):
+        Authenticator.from_file(path)
+
+
 @pytest.mark.parametrize("project_monitor", [False, True])
 def test_ac_013_browse_agent_then_read_one_attempt(tmp_path, credential, project_monitor):
     if project_monitor:

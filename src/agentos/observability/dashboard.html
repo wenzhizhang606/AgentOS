@@ -8,326 +8,382 @@
   <style>
     :root {
       color-scheme: light;
-      --ink: #141e32;
-      --muted: #576681;
-      --line: #e0e6ef;
-      --input-line: #b5c2d6;
-      --surface: #f3f6fa;
-      --blue: #1755ca;
-      --blue-tint: #edf4ff;
-      --navy: #18253e;
-      --green: #176644;
-      --warn: #9e4508;
-      --error: #ab2537;
+      --ink: #162833;
+      --muted: #536671;
+      --line: #dce4e6;
+      --paper: #fff;
+      --page: #f4f7f7;
+      --teal: #076e60;
+      --tint: #e7f6f1;
+      --mono: "IBM Plex Mono", "Cascadia Code", Consolas, monospace;
     }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
-    body {
-      margin: 0;
-      font: 14px/1.55 Inter, "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
-      color: var(--ink);
-      background: var(--surface);
-    }
+    body { margin: 0; color: var(--ink); background: var(--page); font: 14px/1.55 Inter, "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif; }
+    h1, h2, h3, p, dl, dd, figure { margin: 0; }
+    h1 { font-size: clamp(28px, 3vw, 40px); font-weight: 720; line-height: 1.15; letter-spacing: -.045em; }
+    h2 { font-size: 17px; font-weight: 700; line-height: 1.4; letter-spacing: -.025em; }
+    h3 { font-size: 15px; font-weight: 650; }
+    h2[tabindex] { scroll-margin-top: 78px; }
     button, input, select { font: inherit; }
-    button, input:not([type=checkbox]), select {
-      min-height: 36px;
-      border: 1px solid var(--input-line);
-      border-radius: 5px;
-      background: white;
-      color: var(--ink);
-    }
-    button { cursor: pointer; padding: 6px 13px; font-weight: 550; }
-    button:hover:not(:disabled) { background: var(--blue-tint); border-color: #81a6e9; color: var(--blue); }
-    button.primary { background: var(--blue); border-color: var(--blue); color: white; }
-    button.primary:hover:not(:disabled) { background: #1146ad; border-color: #1146ad; color: white; }
-    button:disabled { opacity: .55; cursor: default; }
-    input:not([type=checkbox]), select { padding: 6px 10px; min-width: 0; }
-    input::placeholder { color: #67748b; }
-    input[type=checkbox] { accent-color: var(--blue); margin: 0; width: 16px; height: 16px; }
-    :focus-visible { outline: 3px solid #4284f1; outline-offset: 2px; }
-
-    .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      min-height: 56px;
-      padding: 0 24px;
-      display: flex;
-      align-items: center;
-      gap: 17px;
-      background: var(--navy);
-      color: white;
-    }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 18px;
-      font-weight: 750;
-      letter-spacing: -.035em;
-    }
-    .brand-symbol {
-      width: 25px;
-      height: 25px;
-      border-radius: 7px;
-      background: #3275ef;
-      position: relative;
-    }
-    .brand-symbol::before, .brand-symbol::after {
-      content: "";
-      position: absolute;
-      background: white;
-      left: 11px;
-      top: 6px;
-      width: 3px;
-      height: 13px;
-      border-radius: 2px;
-      transform: rotate(28deg) translateX(-4px);
-    }
-    .brand-symbol::after { transform: rotate(-28deg) translateX(4px); }
-    .product-name { border-left: 1px solid #485674; padding-left: 17px; color: #d8e3f7; font-size: 13px; }
-    .connection-state {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      margin-left: auto;
-      color: #d8e3f7;
-      font-size: 12px;
-      white-space: nowrap;
-    }
-    .connection-state::before, .status-chip::before {
-      content: "";
-      width: 6px;
-      height: 6px;
-      flex: none;
-      border-radius: 50%;
-      background: currentColor;
-    }
-    .connection-state[data-active="true"]::before { background: #6cdea4; }
-    .console { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: calc(100vh - 56px); }
-    .sidebar { background: white; border-right: 1px solid var(--line); padding: 25px 12px 20px; }
-    .workspace-nav { position: sticky; top: 80px; }
-    .sidebar-title { margin: 0 0 12px; padding: 0 10px; font-size: 12px; font-weight: 600; color: var(--muted); }
-    .nav-item {
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      width: 100%;
-      min-height: 40px;
-      padding: 8px 10px;
-      border: 1px solid transparent;
-      border-radius: 5px;
-      background: transparent;
-      text-align: left;
-      white-space: nowrap;
-    }
-    nav .nav-item + .nav-item { margin-top: 4px; }
-    .nav-item.current, .nav-item[aria-pressed=true] {
-      background: var(--blue-tint);
-      color: var(--blue);
-      font-weight: 650;
-    }
-    .nav-icon { display: inline-block; flex: none; width: 15px; height: 15px; position: relative; }
-    .nav-icon.grid {
-      background:
-        linear-gradient(currentColor 0 0) top left / 6px 6px no-repeat,
-        linear-gradient(currentColor 0 0) top right / 6px 6px no-repeat,
-        linear-gradient(currentColor 0 0) bottom left / 6px 6px no-repeat,
-        linear-gradient(currentColor 0 0) bottom right / 6px 6px no-repeat;
-    }
-    .nav-icon.trace { border-left: 2px solid; margin-left: 2px; width: 13px; }
-    .nav-icon.trace::before, .nav-icon.trace::after {
-      content: "";
-      position: absolute;
-      left: 2px;
-      top: 3px;
-      width: 10px;
-      height: 2px;
-      background: currentColor;
-    }
-    .nav-icon.trace::after { top: 10px; width: 7px; }
-    .nav-icon.lock {
-      width: 13px;
-      height: 9px;
-      margin: 5px 1px 0;
-      border: 1.5px solid;
-      border-radius: 2px;
-    }
-    .nav-icon.lock::before {
-      content: "";
-      position: absolute;
-      border: 1.5px solid;
-      border-bottom: 0;
-      border-radius: 5px 5px 0 0;
-      width: 5px;
-      height: 5px;
-      top: -6px;
-      left: 2px;
-    }
-
-    main { min-width: 0; width: 100%; max-width: 1560px; margin: 0 auto; padding: 22px 28px 54px; }
-    .page-header { margin-bottom: 19px; }
-    .breadcrumb { margin: 0 0 9px; color: var(--muted); font-size: 12px; }
-    .breadcrumb span { margin: 0 5px; color: #8797b0; }
-    h1 { margin: 0; font-size: clamp(25px, 3vw, 30px); font-weight: 700; line-height: 1.25; letter-spacing: -.015em; }
-    h2 { margin: 0; font-size: 17px; line-height: 1.35; }
-    h2[tabindex] { scroll-margin-top: 72px; }
-    section, .toolbar {
-      min-width: 0;
-      margin-top: 15px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: white;
-    }
-    section { padding: 17px 18px 16px; }
-    .connect-card { max-width: 570px; margin-top: 0; padding: 25px; border-top: 3px solid var(--blue); }
-    .connect-card h2 { font-size: 18px; }
-    .connect-fields { display: grid; gap: 14px; margin-top: 18px; }
-    label { display: grid; gap: 5px; font-weight: 550; }
-    label input:not([type=checkbox]), label select { width: 100%; font-weight: 400; }
-    .connect-fields > button { justify-self: start; min-width: 100px; }
-    .note, .meta { color: var(--muted); margin: 5px 0 0; }
-    .meta { overflow-wrap: anywhere; }
+    button, input:not([type=checkbox]), select { min-height: 36px; min-width: 0; border: 1px solid #c6d2d5; border-radius: 7px; color: var(--ink); background: white; }
+    button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 6px 12px; cursor: pointer; font-weight: 550; }
+    button:hover:not(:disabled) { background: #eaf5f1; color: #075d51; border-color: #8ab9ac; }
+    button:disabled { color: #70808a; background: #f4f6f7; cursor: default; }
+    :focus-visible { outline: 3px solid #068b9a; outline-offset: 3px; }
+    input:not([type=checkbox]), select { padding: 6px 10px; }
+    input::placeholder { color: #77848d; }
+    input[type=checkbox] { margin: 0; width: 15px; height: 15px; accent-color: var(--teal); }
+    label { display: grid; gap: 6px; font-weight: 600; }
+    label input:not([type=checkbox]), label select { width: 100%; font-weight: 450; }
+    .icon { width: 17px; height: 17px; flex: none; vertical-align: middle; }
+    .topbar { position: sticky; top: 0; z-index: 5; background: #122b31; color: #f3faf7; }
+    .top-inner { width: min(100%, 1504px); min-height: 62px; margin: auto; padding: 0 clamp(16px, 4vw, 64px); display: flex; align-items: center; gap: 18px; }
+    .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 23px; font-weight: 660; letter-spacing: -.055em; line-height: 1; }
+    .brand-mark { width: 30px; height: 30px; color: #122b31; background: #9de5c6; border-radius: 8px; display: grid; place-items: center; }
+    .brand-mark .icon { width: 22px; height: 22px; }
+    .product-name { padding-left: 17px; border-left: 1px solid #4b6266; color: #c7dbd9; font-weight: 540; letter-spacing: .04em; }
+    .connection-state { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; color: #d4e1df; font-size: 12px; white-space: nowrap; }
+    .connection-state::before, .status-chip::before { content: ""; flex: none; display: inline-block; width: 6px; height: 6px; border-radius: 100%; background: currentColor; }
+    .connection-state[data-active=true]::before { background: #91ddae; box-shadow: 0 0 0 3px #23493f; }
+    .console { margin: 0 auto; }
+    .sidebar { background: white; border-bottom: 1px solid var(--line); }
+    .workspace-nav, main { width: min(100%, 1504px); margin: auto; padding-inline: clamp(16px, 4vw, 64px); }
+    .workspace-nav, #views { display: flex; gap: 29px; align-items: center; }
+    .nav-item { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 49px; border: 0; border-radius: 0; padding: 0 2px; background: transparent; color: #556773; font-size: 13px; }
+    .nav-item[aria-pressed=true] { color: #075e50; font-weight: 700; }
+    .nav-item[aria-pressed=true]::after { content: ""; position: absolute; inset: auto 0 -1px; height: 3px; background: var(--teal); }
+    #connect-nav { display: none; }
+    body:has(#connect-panel:not([hidden])) .sidebar { display: none; }
+    main { min-width: 0; padding-top: 25px; padding-bottom: 56px; }
+    .page-header { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 16px 24px; margin-bottom: 13px; }
+    .breadcrumb { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; font-size: 12px; color: var(--muted); }
+    .breadcrumb .icon { width: 13px; height: 13px; }
+    .breadcrumb span { color: #99a5a9; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+    .toolbar label { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 12px; white-space: nowrap; }
+    .toolbar label select { width: auto; }
+    .toolbar button, .toolbar select { font-size: 12px; min-height: 33px; }
+    #disconnect { color: #57686e; }
+    #project-chip { padding: 4px 9px; border: 1px solid #bcdad1; color: #175e4c; border-radius: 5px; background: #e9f5f0; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    #project-chip .icon { width: 14px; height: 14px; }
+    #connected-project { font-family: var(--mono); }
+    #status { margin: 7px 0; color: #4d6369; font-size: 12px; overflow-wrap: anywhere; }
+    #status:empty { margin: 0; }
+    section { min-width: 0; }
+    #report > section, #explorer > section, .chart-card { margin-top: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); padding: 19px 22px; }
+    #report > .summary-panel { padding: 0; border: 0; border-radius: 0; background: transparent; }
+    .summary-scope { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 14px; margin: 5px 0 14px; }
+    .note, .meta { color: var(--muted); font-size: 12px; margin-top: 5px; overflow-wrap: anywhere; }
+    .summary-scope .note { margin: 0; }
     .note:empty, .meta:empty { display: none; }
-    .toolbar { margin-top: 0; padding: 10px 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; }
-    .toolbar label { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
-    #project-chip {
-      display: flex;
-      gap: 6px;
-      min-width: 0;
-      margin-right: auto;
-      overflow-wrap: anywhere;
-      color: var(--muted);
-      font-size: 13px;
-    }
-    #project-chip strong { color: var(--ink); }
-    #status { min-height: 18px; margin: 8px 1px 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
-    #status:empty { margin: 0; min-height: 0; }
-    section:has(> #metrics) { margin-top: 10px; }
-    .summary-scope { display: flex; flex-wrap: wrap; gap: 4px 16px; }
-    dl { display: grid; margin: 13px 0 0; gap: 9px; }
-    #metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    dl div { min-width: 0; padding: 10px 12px; background: #f8faff; border: 1px solid var(--line); border-radius: 5px; }
-    dt { color: var(--muted); font-size: 12px; }
-    dd { margin: 3px 0 0; font-size: 20px; font-weight: 650; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-    #metrics div:first-child { background: var(--blue-tint); border-color: #cfdef8; }
-    #metrics div:first-child dd { color: var(--blue); }
-    .warning, dl .warning dd { color: var(--warn); font-weight: 650; }
-    .scroll { overflow-x: auto; margin-top: 11px; border: 1px solid var(--line); border-radius: 5px; }
-    table { border-collapse: collapse; width: 100%; text-align: left; font-size: 13px; }
-    th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    th { font-weight: 650; color: #384963; background: #f4f7fc; }
-    tbody tr:last-child td { border-bottom: 0; }
-    tbody tr:nth-child(even) { background: #fbfcfe; }
-    tbody tr:focus-within, tbody tr:hover, tbody tr.selected { background: var(--blue-tint); }
-    .task-link, .run-button {
-      border: 0;
-      padding: 0;
-      min-height: auto;
-      background: transparent;
-      color: var(--blue);
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-    .task-link, code { font-family: ui-monospace, Consolas, monospace; }
-    .details { min-width: 145px; max-width: 330px; white-space: normal; overflow-wrap: anywhere; }
-    .details small { display: block; color: var(--muted); font-size: 12px; }
-    .status-chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 4px; padding: 1px 6px; background: #eef2f8; color: #465976; font-size: 12px; }
-    .status-chip[data-state=succeeded], .status-chip[data-state=final] { background: #eaf7f0; color: var(--green); }
-    .status-chip[data-state=running] { background: var(--blue-tint); color: var(--blue); }
-    .status-chip[data-state=pending], .status-chip[data-state=timed_out] { background: #fff4df; color: var(--warn); }
-    .status-chip[data-state=failed] { background: #fceef0; color: var(--error); }
-    .picker { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-    .picker label { min-width: 0; flex: 1 1 190px; }
-    .paging { display: flex; flex-wrap: wrap; gap: 6px; }
+    #scope { color: #295c53; font-weight: 600; }
+    #metrics { display: grid; grid-template-columns: repeat(20,minmax(0,1fr)); gap: 0; }
+    #metrics > div { grid-column: span 4; min-width: 0; padding: 7px 10px 5px 0; }
+    dt { font-size: 12px; color: var(--muted); }
+    dd { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    #metrics dd { font-family: var(--mono); font-size: 15px; font-weight: 600; letter-spacing: -.04em; }
+    #metrics > div:nth-child(-n+4) { grid-column: span 5; position: relative; background: white; border: 1px solid var(--line); border-radius: 10px; padding: 15px 16px 14px; margin: 0 10px 10px 0; }
+    #metrics > div:nth-child(4) { margin-right: 0; }
+    #metrics > div:nth-child(-n+4) dd { margin-top: 5px; font-size: clamp(20px,2.2vw,32px); line-height: 1.25; }
+    #metrics > div:nth-child(-n+4) dt { color: #435d63; }
+    #metrics > div:first-child { background: #153d3d; border-color: #153d3d; }
+    #metrics > div:first-child dt { color: #c6e6df; }
+    #metrics > div:first-child dd { color: white; }
+    #metrics > div:first-child::after { content: ""; position: absolute; right: 16px; top: 15px; width: 12px; height: 12px; background: radial-gradient(circle,#9be2c3 2px,transparent 2.5px) 0 0/6px 6px; }
+    .metric-toggle { display: none; }
+    .warning, .warning dd { color: #965314; font-weight: 650; }
+    #overview-visuals { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .chart-card h2 { margin-bottom: 12px; }
+    #status-chart { display: flex; gap: clamp(14px,2.5vw,38px); align-items: center; min-width: 0; }
+    .state-ring { display:block; width: clamp(106px,11vw,145px); height: auto; flex: none; }
+    .ring-number { font-family: var(--mono); font-size: 26px; font-weight: 650; letter-spacing: -.045em; fill: var(--ink); }
+    .ring-caption { font-size: 12px; fill: var(--muted); }
+    .chart-legend { flex: 1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px 16px; padding: 0; margin: 0; list-style: none; }
+    .chart-legend li { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); min-width: 0; border-bottom: 1px solid #edf1ef; padding-bottom: 3px; }
+    .chart-legend strong { margin-left: auto; color: var(--ink); font: 600 13px var(--mono); overflow-wrap:anywhere; }
+    .state-key { flex: none; width: 7px; height: 7px; border-radius: 2px; background: #8390a5; }
+    .state-key[data-state=succeeded] { background: #14816e; } .state-key[data-state=failed] { background: #cc4e5d; }
+    .state-key[data-state=running] { background: #5368cc; } .state-key[data-state=queued] { background: #c58a33; }
+    .state-key[data-state=timed_out] { background: #a96123; }
+    #call-chart { display: grid; align-content: center; gap: 13px; }
+    .call-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 3px 10px; }
+    .call-label, .call-count { font-size: 12px; }
+    .call-count { text-align: right; font-family: var(--mono); }
+    .call-bar { grid-column: 1 / -1; width: 100%; height: 7px; border-radius: 8px; display:block; overflow:hidden; }
+    .scroll { margin-top: 12px; overflow-x: auto; border: 1px solid var(--line); border-radius: 7px; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; font-variant-numeric: tabular-nums; }
+    td, th { padding: 9px 12px; white-space: nowrap; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { color: #4b6169; background: #f2f6f6; font-size: 12px; font-weight: 650; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover, tbody tr:focus-within, tbody tr.selected { background: #eff8f5; }
+    .task-link, .run-button { min-height: auto; border: 0; border-radius: 2px; padding: 0; color: #116e60; background: none; text-underline-offset: 3px; }
+    .task-link:hover, .run-button:hover { text-decoration: underline; }
+    .task-link, code { font-family: var(--mono); }
+    .details { max-width: 330px; min-width: 140px; white-space: normal; overflow-wrap: anywhere; }
+    .details small { display: block; color: var(--muted); }
+    .status-chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 99px; color: #485d6d; background: #edf1f4; font-size: 12px; }
+    .status-chip[data-state=succeeded], .status-chip[data-state=final] { background: #e1f4ec; color: #196544; }
+    .status-chip[data-state=running] { color: #3f50a2; background: #e9edff; }
+    .status-chip[data-state=pending], .status-chip[data-state=timed_out] { color: #86510b; background: #fff1d5; }
+    .status-chip[data-state=failed] { color: #a13046; background: #ffedf0; }
+    .picker, .paging { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+    .picker { margin-top: 12px; max-width: 850px; }
+    .picker label { flex: 1 1 230px; min-width: 0; }
     .actions { margin-top: 12px; }
-    #trace-id code { padding: 2px 5px; color: var(--blue); background: var(--blue-tint); border-radius: 4px; user-select: all; }
-    #run-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    #run-facts dd { font-size: 14px; }
-    .events td:first-child { border-left: 3px solid #bbc8de; }
-    .events tr[data-kind=context] td:first-child { border-left-color: #5b82d6; }
-    .events tr[data-kind=skill] td:first-child, .events tr[data-kind=tool] td:first-child { border-left-color: #57917c; }
-    .events tr[data-kind=model] td:first-child { border-left-color: #8b73c3; }
-    .events tr.failed td:first-child { border-left-color: var(--error); }
-
-    @media (min-width: 1340px) {
-      #metrics { grid-template-columns: repeat(7, minmax(0, 1fr)); }
-      #run-facts { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    #trace-id code { padding: 3px 6px; border-radius: 4px; background: var(--tint); color: var(--teal); user-select: all; }
+    #run-facts { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 1px; border-radius: 7px; border: 1px solid var(--line); overflow: hidden; margin: 14px 0; background: var(--line); }
+    #run-facts > div { background: #f9fbfa; min-width: 0; padding: 8px 11px; }
+    #run-facts dd { font-size: 13px; font-weight: 600; }
+    .events td:first-child { border-left: 3px solid #a3b5b9; }
+    .events tr[data-kind=context] td:first-child { border-left-color: #64a7b2; }
+    .events tr[data-kind=tool] td:first-child { border-left-color: #809cdd; }
+    .events tr[data-kind=skill] td:first-child { border-left-color: #968ace; }
+    .events tr[data-kind=model] td:first-child { border-left-color: #439f8c; }
+    .events tr.failed td:first-child { border-left-color: #c65764; }
+    .waterfall-panel { border: 1px solid #d7e6e1; border-radius: 8px; margin-top: 16px; padding: 13px 15px; background: #fcfefd; }
+    .waterfall-note { font-size: 12px; margin: 3px 0 9px; color: var(--muted); }
+    .waterfall-axis, .waterfall-row { display: grid; grid-template-columns: minmax(110px,23%) minmax(48px,1fr) minmax(85px,16%); gap: 12px; align-items:center; }
+    .waterfall-axis { font: 11px/1.5 var(--mono); color:var(--muted); padding: 7px 0; }
+    .waterfall-axis-range { display:flex;justify-content:space-between; gap:3px; }
+    .waterfall-list { max-height: 380px; overflow-y:auto; }
+    .waterfall-row { min-height: 31px; border-top:1px solid #e6eeeb; font-size:12px; }
+    .waterfall-track { width:100%; height:17px; overflow:visible; color:#637e8b; }
+    .waterfall-row[data-kind=skill] .waterfall-track { color:#8073b6; }
+    .waterfall-row[data-kind=tool] .waterfall-track { color:#517ab9; }
+    .waterfall-row[data-kind=model] .waterfall-track { color:#178a73; }
+    .waterfall-row[data-kind=context] .waterfall-track { color:#49949b; }
+    .waterfall-row[data-outcome=open] .waterfall-track { color:#b58728; }
+    .waterfall-row[data-outcome=failed] .waterfall-track { color:#bc4256; }
+    .waterfall-label, .waterfall-value { min-width: 0; overflow-wrap:anywhere; }
+    .waterfall-value { text-align:right; font-variant-numeric: tabular-nums; }
+    .trace-events-heading { margin-top:16px; }
+    /* The entry page gives the connection form a separate surface from the trace illustration. */
+    body:has(#connect-panel:not([hidden])) { background-color: #edf2f1; background-image: radial-gradient(#cfdbd8 .8px, transparent .9px); background-size: 15px 15px; }
+    body:has(#connect-panel:not([hidden])) main { padding-block: clamp(34px,9vh,110px) 48px; }
+    body:has(#connect-panel:not([hidden])) .page-header { display: none; }
+    body:has(#connect-panel:not([hidden])) #status { width:min(100%,1090px); margin:10px auto; color:#a23345; }
+    .connect-card { display: grid; grid-template-columns: minmax(0,1.13fr) minmax(0,1fr); isolation:isolate; width: min(100%,1090px); margin:0 auto; border: 1px solid #cbd7d4; border-radius: 19px; overflow: hidden; box-shadow: 0 20px 65px -36px #293e41a1; background: white; }
+    .entry-art { position: relative; display:flex; flex-direction:column; min-width:0; padding:clamp(27px,3.15vw,48px); color:#effbf7; background:radial-gradient(ellipse at 62% 74%,#20524e 0%,transparent 65%),linear-gradient(125deg,#183a3e,#123036 70%); overflow:hidden; }
+    .entry-art::before { content:""; position:absolute; inset:0; z-index:0; background-image: linear-gradient(#b6e5d309 1px,transparent 1px), linear-gradient(90deg,#b6e5d309 1px,transparent 1px); background-size:28px 28px; }
+    .entry-art > * { position:relative; }
+    .entry-art h1 { font-size: clamp(31px,3.25vw,49px); line-height:1.22; font-weight:680; margin:0 0 11px; color:#f3faf6; }
+    .entry-art p { color:#b9d6cf; font-size:14px; line-height:1.8; max-width:30em; }
+    .architecture-art { margin: 28px -5px -2px; flex:1; display:flex; flex-direction:column; justify-content:flex-end; }
+    .architecture-art svg { display:block; width:100%; max-height:242px; min-height:145px; }
+    .architecture-art figcaption { margin: 14px 0 0; display:flex; align-items:center; gap:8px; font:11px/1.4 var(--mono); color:#a2c0b8; }
+    .architecture-art figcaption::before { content:""; width:15px; height:1px; background:#88bbad; }
+    .entry-form { align-self:center; padding:clamp(28px,4vw,64px); min-width:0; }
+    .form-icon { display:grid; place-items:center; width:42px; height:42px; border-radius:12px; background:#e5f5ed; border:1px solid #cce7dc; color:#196c55; margin-bottom:20px; }
+    .form-icon .icon { width:22px; height:22px; }
+    #connect-heading { font-size:clamp(25px,2.35vw,34px); letter-spacing:-.045em; }
+    .entry-form > .note { font-size:13px; margin-top:5px; }
+    .connect-fields { margin-top:26px; display:grid; gap:16px; }
+    .connect-fields label { font-size:13px; color:#283e43; }
+    .field { display:flex; align-items:center; position:relative; }
+    .field > .icon { position:absolute; left:12px; color:#688178; pointer-events:none; }
+    .connect-fields input:not([type=checkbox]) { min-height:43px; padding-left:38px; border-color:#becfcb; }
+    button.primary { color:white; border-color:#0c5d50; background:#0b6959; justify-content:space-between; padding:9px 15px; min-height:43px; margin-top:4px; }
+    button.primary:hover:not(:disabled) { color:white; border-color:#064e43; background:#075747; }
+    .session-note { display:flex; gap:7px; align-items:center; margin-top:18px; color:var(--muted); font-size:12px; }
+    .session-note .icon { width:14px; height:14px; }
+    @media (max-width:940px) {
+      .page-header { align-items:flex-start; }
+      .chart-legend { grid-template-columns:1fr; gap:3px; }
+      #run-facts { grid-template-columns:repeat(3,minmax(0,1fr)); }
+      .entry-form { padding:32px 27px; }
     }
-    @media (max-width: 920px) {
-      .console { grid-template-columns: 165px minmax(0, 1fr); }
-      main { padding-inline: 19px; }
-      #metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    @media (max-width:730px) {
+      .top-inner { min-height:54px; gap:12px; } .product-name { padding-left:12px; }
+      .workspace-nav, #views { gap:20px; }
+      main { padding-top:19px; }
+      .page-header { display:block; } .toolbar { margin-top:13px; gap:7px 9px; }
+      #metrics { grid-template-columns:repeat(12,minmax(0,1fr)); }
+      #metrics > div { grid-column:span 4; }
+      #metrics > div:nth-child(-n+4) { grid-column:span 6; margin:0 7px 7px 0; padding:12px; }
+      #metrics > div:nth-child(even) { margin-right:0; }
+      #metrics > div:nth-child(-n+4) dd { font-size:23px; }
+      .metric-toggle { display: inline-flex; align-items: center; gap: 7px; margin: 5px 0 1px; font-size: 12px; color: var(--teal); cursor: pointer; }
+      .summary-panel:has(#show-more-metrics:not(:checked)) #metrics > div:nth-child(n+5) { display: none; }
+      #overview-visuals { gap:0; grid-template-columns:1fr; }
+      .chart-legend { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 12px; }
+      #report > section, #explorer > section, .chart-card { padding:15px; }
+      #report > .summary-panel { padding:0; }
+      .connect-card { grid-template-columns:1fr; max-width:560px; }
+      body:has(#connect-panel:not([hidden])) main { padding-block:22px 34px; }
+      .entry-art { min-height:118px; padding:21px 23px; justify-content:center; }
+      .entry-art h1 { font-size:28px; }
+      .entry-art p { font-size:12px; max-width:65%; }
+      .architecture-art { position:absolute; width:36%; max-width:150px; right:-9px; bottom:3px; margin:0; opacity:.87; }
+      .architecture-art svg { min-height:0; height:auto; }
+      .architecture-art figcaption { display:none; }
+      .entry-form { padding:24px; }
+      .form-icon { display:none; }
+      .connect-fields { margin-top:17px; gap:12px; }
+      .session-note { margin-top:12px; }
+      #run-facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .waterfall-axis,.waterfall-row { grid-template-columns:minmax(70px,28%) minmax(42px,1fr) minmax(53px,20%); gap:6px; }
+      .waterfall-panel { padding:10px; }
     }
-    @media (max-width: 660px) {
-      .topbar { padding-inline: 14px; gap: 10px; }
-      .product-name { padding-left: 10px; }
-      .console { display: block; }
-      .sidebar { border-right: 0; border-bottom: 1px solid var(--line); padding: 5px 12px; }
-      .workspace-nav { position: static; }
-      .sidebar-title { display: none; }
-      .sidebar nav { display: flex; gap: 5px; }
-      .sidebar .nav-item { justify-content: center; min-height: 37px; }
-      .sidebar nav .nav-item + .nav-item { margin-top: 0; }
-      main { padding: 17px 12px 38px; }
-      .page-header { margin-bottom: 14px; }
-      section, .connect-card { padding: 14px; }
-      #project-chip { width: 100%; }
-      #metrics, #run-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      dl div { padding: 8px 9px; }
-      dd { font-size: 17px; }
+    @media (max-width:420px) {
+      .top-inner,main,.workspace-nav { padding-inline:13px; }
+      .brand { font-size:21px; } .product-name {font-size:12px;}
+      .chart-legend { gap:5px; }
+      #status-chart {gap:12px;} .state-ring {width:92px;}
+      #metrics > div { grid-column:span 6; }
+      .waterfall-row { font-size:11px; }
+      .entry-form {padding:21px;}
+      .toolbar #project-chip { max-width:100%; }
+    }
+    .entry-switch { display:inline-block; color:var(--teal); margin-top:12px; text-underline-offset:3px; }
+    .catalog-numbers { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:18px 0; }
+    .catalog-numbers > div { padding:18px 22px; border:1px solid var(--line); border-radius:12px; background:white; }
+    .catalog-numbers dt { font-weight:660; color:var(--muted); }
+    .catalog-numbers dd { margin-top:5px; font:650 clamp(26px,3vw,40px)/1.3 var(--mono); }
+    .catalog-numbers > div:first-child { background:#153d3d; border-color:#153d3d; color:white; }
+    .catalog-numbers > div:first-child dt { color:#c6e6df; }
+    .catalog-panel { padding:19px 22px; border-radius:12px; border:1px solid var(--line); background:white; }
+    .catalog-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+    .catalog-header label { display:flex; align-items:center; gap:8px; font-size:12px; }
+    .catalog-release { overflow-wrap:anywhere; font-size:12px; }
+    #catalog-table .digest { font-family:var(--mono); white-space:normal; overflow-wrap:anywhere; }
+    #catalog-table .resource-name { font-family:var(--mono); font-weight:600; }
+    @media (max-width:540px) {
+      #views { gap:12px; flex-wrap:wrap; } #views button { font-size:12px; gap:4px; }
+      .catalog-numbers { gap:8px; } .catalog-numbers > div, .catalog-panel { padding:13px; }
+    }
+    @media (forced-colors:active) {
+      .connection-state::before,.state-key { border:1px solid CanvasText; }
+      .nav-item[aria-pressed=true] { border-bottom:2px solid Highlight; }
+      .call-bar,.state-ring,.waterfall-track { forced-color-adjust:none; }
     }
   </style>
 </head>
 <body>
 <header class="topbar">
-  <strong class="brand"><span class="brand-symbol" aria-hidden="true"></span>AgentOS</strong>
-  <span class="product-name">观测控制台</span>
-  <span id="connection-state" class="connection-state">未连接</span>
+  <div class="top-inner">
+    <strong class="brand"><span class="brand-mark"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m2.5 15 6.2-9.4 6.3 9.4m-5.2 3.4L16 9l5.5 8.2M6.8 15h5.8"/></svg></span>AgentOS</strong>
+    <span id="product-name" class="product-name">观测控制台</span>
+    <span id="connection-state" class="connection-state">未连接</span>
+  </div>
 </header>
 <div class="console">
   <aside class="sidebar" aria-label="工作区">
     <div class="workspace-nav">
-      <p class="sidebar-title">工作区</p>
-      <div id="connect-nav" class="nav-item current"><span class="nav-icon lock" aria-hidden="true"></span>项目连接</div>
+      <span id="connect-nav">项目连接</span>
       <nav aria-label="监控视图" id="views" hidden>
-        <button type="button" class="nav-item" id="overview-view" aria-pressed="true" aria-controls="report">
-          <span class="nav-icon grid" aria-hidden="true"></span>项目概览
-        </button>
-        <button type="button" class="nav-item" id="runs-view" aria-pressed="false" aria-controls="explorer">
-          <span class="nav-icon trace" aria-hidden="true"></span>Agent 运行轨迹
-        </button>
+        <button type="button" class="nav-item" id="overview-view" aria-pressed="true" aria-controls="report"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>项目概览</button>
+        <button type="button" class="nav-item" id="runs-view" aria-pressed="false" aria-controls="explorer"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="5" cy="5" r="2"/><circle cx="18" cy="10" r="2"/><circle cx="18" cy="18" r="2"/><path d="M5 7v8a3 3 0 0 0 3 3h8M5 10h11"/></svg>Agent 运行轨迹</button>
+        <button type="button" class="nav-item" id="resources-view" aria-pressed="false" aria-controls="resources"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5m-18 4 9 5 9-5"/></svg>资源管理</button>
       </nav>
     </div>
   </aside>
   <main>
   <div class="page-header">
-    <p class="breadcrumb">控制台 <span aria-hidden="true">/</span> 运行监控</p>
-    <h1 id="page-title">运行监控</h1>
+    <div>
+      <p class="breadcrumb"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>工作区 <span aria-hidden="true">/</span> <b id="crumb-product">运行监控</b></p>
+      <h1 id="page-title">运行监控</h1>
+    </div>
+    <div id="actions" class="toolbar" hidden>
+      <span id="project-chip"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>项目 <strong id="connected-project"></strong></span>
+      <label>时间范围<select id="hours"><option value="1">过去 1 小时</option><option value="24" selected>过去 24 小时</option><option value="168">过去 7 天</option></select></label>
+      <button type="button" id="refresh"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 5v5h-5M4 19v-5h5"/><path d="M6.2 8a7 7 0 0 1 11.5-2l2 3M4.3 15l2 3A7 7 0 0 0 18 16"/></svg>刷新</button>
+      <label><input type="checkbox" id="automatic">每 30 秒刷新</label>
+      <button type="button" id="disconnect">断开连接</button>
+    </div>
   </div>
   <section id="connect-panel" class="connect-card" aria-labelledby="connect-heading">
-    <h2 id="connect-heading">连接项目</h2>
-    <p class="note">连接后查看任务状态、运行轨迹和模型用量。</p>
-    <form id="connect" class="connect-fields" autocomplete="off">
-      <label>项目 ID<input id="project" type="text" required maxlength="128" spellcheck="false" placeholder="输入项目 ID"></label>
-      <label>访问令牌<input id="token" type="password" required autocomplete="off" spellcheck="false" placeholder="输入 AgentOS 访问令牌"></label>
-      <button class="primary" type="submit">载入项目</button>
-    </form>
+    <div class="entry-art">
+      <h1 id="entry-title">Agent 运行监控</h1>
+      <p id="entry-description">查看每次运行中用到的上下文、工具和模型，定位耗时与异常。</p>
+      <figure class="architecture-art">
+        <svg viewBox="0 0 448 222" aria-hidden="true" focusable="false">
+          <defs>
+            <linearGradient id="plate-top" x2="1" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#c8f7dc"/><stop offset="1" stop-color="#64c6ae"/></linearGradient>
+            <linearGradient id="plate-mid" x2="1" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#4c9985"/><stop offset="1" stop-color="#2f6863"/></linearGradient>
+            <linearGradient id="plate-base" x2="1" y2="1" gradientUnits="objectBoundingBox"><stop stop-color="#39766d"/><stop offset="1" stop-color="#234746"/></linearGradient>
+            <radialGradient id="ambient-glow"><stop stop-color="#8de4c0" stop-opacity=".31"/><stop offset="1" stop-color="#72d3ad" stop-opacity="0"/></radialGradient>
+          </defs>
+          <ellipse cx="229" cy="169" rx="128" ry="40" fill="url(#ambient-glow)"/>
+          <g fill="none" stroke="#7bc6af" stroke-linejoin="round">
+            <path opacity=".22" stroke-dasharray="3 5" d="m54 138 168 79 167-79M66 85l155-74 154 74"/>
+            <path d="m37 71 57 28 38-18 51 25m84-17 54-26 31 15 50-24m-119 91 29 14 32-15 51 24M51 179l38-19 33 16 49-24"/>
+            <path opacity=".33" d="m39 77 55 26 38-18 32 16m124 48 24 12 32-15 35 17"/>
+          </g>
+          <g stroke="#8ad5ba" stroke-linejoin="round">
+            <path d="m146 136 78-38 79 38v9l-79 39-78-39Z" fill="#244b47"/>
+            <path d="m146 136 78-38 79 38-79 39Z" fill="url(#plate-base)"/>
+            <path d="m144 113 80-39 81 39v10l-81 40-80-40Z" fill="#356a60"/>
+            <path d="m144 113 80-39 81 39-81 40Z" fill="url(#plate-mid)"/>
+            <path d="m142 87 82-40 83 40v12l-83 40-82-40Z" fill="#539f89"/>
+            <path d="m142 87 82-40 83 40-83 41Z" fill="url(#plate-top)" stroke="#c9f7df"/>
+          </g>
+          <g stroke="#275f50" stroke-width="1.05" fill="none" opacity=".5">
+            <path d="m157 87 67-33 68 33-68 33Z" stroke-dasharray="2 4"/>
+            <path d="m169 85 2 1-2 1-2-1Zm110 0 2 1-2 1-2-1Z"/>
+          </g>
+          <g fill="#245546">
+            <path d="m194 91 16-23 21 11-4 6-12-6-7 10 16 8-4 6Z"/>
+            <path d="m217 86 15-23 21 11-4 6-12-6-7 10 16 8-4 6Z"/>
+          </g>
+          <g fill="#b3f1d1" stroke="#153d39" stroke-width="2">
+            <circle cx="37" cy="71" r="4"/><circle cx="402" cy="54" r="4"/><circle cx="395" cy="168" r="4"/><circle cx="51" cy="179" r="4"/>
+            <circle cx="94" cy="99" r="2.8"/><circle cx="321" cy="63" r="2.8"/><circle cx="344" cy="144" r="2.8"/><circle cx="122" cy="176" r="2.8"/>
+          </g>
+          <g font-family="Consolas,monospace" font-size="11" fill="#c7e5d8">
+            <text x="25" y="57">Context</text><text x="411" y="40" text-anchor="end">Model</text>
+            <text x="40" y="200">Skill</text><text x="404" y="190" text-anchor="end">Tool</text>
+          </g>
+        </svg>
+        <figcaption>Agent 执行组件示意</figcaption>
+      </figure>
+    </div>
+    <div class="entry-form">
+      <span class="form-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg></span>
+      <h2 id="connect-heading">连接项目</h2>
+      <p class="note">使用项目 ID 和访问令牌进入工作区。</p>
+      <form id="connect" class="connect-fields" autocomplete="off">
+        <label>项目 ID<span class="field"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg><input id="project" type="text" required maxlength="128" spellcheck="false" placeholder="输入项目 ID"></span></label>
+        <label>访问令牌<span class="field"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="8" cy="9" r="4"/><path d="m11 12 8 8 2-2-2-2 1-1-2-2"/></svg><input id="token" type="password" required autocomplete="off" spellcheck="false" placeholder="输入 AgentOS 访问令牌"></span></label>
+        <button class="primary" type="submit">载入项目<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 12h15m-6-6 6 6-6 6"/></svg></button>
+      </form>
+      <a id="entry-switch" class="entry-switch" href="/resources">打开资源管理</a>
+      <p class="session-note"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m12 3 8 3v5c0 4.4-2.6 7.8-8 10-5.4-2.2-8-5.6-8-10V6l8-3Z"/><path d="m9 12 2 2 4-5"/></svg>访问令牌仅用于本次连接。</p>
+    </div>
   </section>
-  <div id="actions" class="toolbar" hidden>
-    <span id="project-chip">项目 <strong id="connected-project"></strong></span>
-    <label>时间范围<select id="hours"><option value="1">过去 1 小时</option><option value="24" selected>过去 24 小时</option><option value="168">过去 7 天</option></select></label>
-    <button type="button" id="refresh">刷新</button>
-    <label><input type="checkbox" id="automatic">每 30 秒刷新</label>
-    <button type="button" id="disconnect">断开连接</button>
-  </div>
   <p id="status" role="status" aria-live="polite"></p>
+  <div id="resources" hidden>
+    <dl class="catalog-numbers">
+      <div><dt>已启用 Skill</dt><dd id="skill-inventory"></dd></div>
+      <div><dt>已启用 Tool</dt><dd id="tool-inventory"></dd></div>
+    </dl>
+    <section class="catalog-panel" aria-labelledby="catalog-heading">
+      <div class="catalog-header">
+        <div><h2 id="catalog-heading">当前发布的资源</h2>
+          <p class="meta catalog-release">发布版本 <code id="catalog-release"></code></p></div>
+        <label>资源类型<select id="resource-type"><option value="">全部</option><option value="skill">Skill</option><option value="tool">Tool</option></select></label>
+      </div>
+      <div class="scroll"><table><thead><tr><th>资源名称</th><th>类型</th><th>版本</th><th>内容摘要（SHA-256）</th></tr></thead>
+        <tbody id="catalog-table"></tbody></table></div>
+    </section>
+  </div>
   <div id="report" hidden>
-    <section aria-labelledby="summary-heading">
+    <section class="summary-panel" aria-labelledby="summary-heading">
       <h2 id="summary-heading">运行指标</h2>
       <div class="summary-scope"><p id="scope" class="note"></p><p id="window" class="note"></p></div>
       <dl id="metrics"></dl>
+      <label class="metric-toggle"><input id="show-more-metrics" type="checkbox" aria-controls="metrics">显示更多运行指标</label>
     </section>
+    <div id="overview-visuals">
+      <section class="chart-card" aria-labelledby="status-chart-heading">
+        <h2 id="status-chart-heading">任务状态分布</h2>
+        <div id="status-chart"></div>
+      </section>
+      <section class="chart-card" aria-labelledby="call-chart-heading">
+        <h2 id="call-chart-heading">组件调用量</h2>
+        <div id="call-chart"></div>
+      </section>
+    </div>
     <section aria-labelledby="tasks-heading">
       <h2 id="tasks-heading">最近任务</h2><p id="task-count" class="note"></p>
       <div class="scroll">
@@ -394,6 +450,11 @@
       <p id="trace-id" class="meta"></p>
       <dl id="run-facts"></dl>
       <p id="trace-note" class="note" role="status"></p>
+      <div class="waterfall-panel">
+        <h3>调用瀑布图</h3>
+        <div id="waterfall"></div>
+      </div>
+      <h3 class="trace-events-heading">事件明细</h3>
       <div class="scroll"><table class="events">
         <thead><tr><th>发生时间</th><th>类型</th><th>事件</th><th>执行尝试</th><th>来源 / 调用标识</th><th>耗时</th><th>错误码</th></tr></thead>
         <tbody id="trace"></tbody>
@@ -416,7 +477,9 @@
     timed_out:"超时", cancelled:"取消", dispatch_admitted:"模型发送准入", receipt_settled:"费用结算"};
   const kinds = {task:"任务", context:"上下文", skill:"Skill", tool:"Tool", model:"模型"};
   let connection = null, selected = null, projectRead = null, taskRead = null, timer = null;
-  let view = "overview", agent = "", instance = null;
+  const initialView = () => location.pathname === "/resources" ? "resources" : "overview";
+  let view = initialView(), agent = "", instance = null;
+  let inventory = [];
   function pageState() { return {previous:[], cursor:null, next:null}; }
   let agentPage = pageState(), runPage = pageState(), tracePage = pageState();
   const date = value => value ? new Date(value).toLocaleString("zh-CN", {hour12:false}) : "—";
@@ -469,9 +532,10 @@
   }
   function clearProject() {
     clearDetail();
+    clearInventory();
     resetExplorer();
     byId("report").hidden = true;
-    for (const id of ["metrics","capabilities","tasks","scope","window","task-count","registered","release","cap-status"]) byId(id).replaceChildren();
+    for (const id of ["metrics","status-chart","call-chart","capabilities","tasks","scope","window","task-count","registered","release","cap-status"]) byId(id).replaceChildren();
   }
   function showConnection() {
     const open = connection !== null;
@@ -490,20 +554,30 @@
     clearTimeout(timer);
     projectRead?.abort(); projectRead = null; connection = null;
     clearProject();
-    view = "overview";
+    view = initialView();
     showConnection();
     byId("automatic").checked = false;
     byId("token").value = "";
     byId("status").textContent = "";
   }
   function setViewButtons() {
+    const resources = view === "resources";
     byId("overview-view").setAttribute("aria-pressed", String(view === "overview"));
     byId("runs-view").setAttribute("aria-pressed", String(view === "runs"));
-    byId("page-title").textContent = !connection ? "运行监控" : view === "runs" ? "Agent 运行轨迹" : "项目概览";
+    byId("resources-view").setAttribute("aria-pressed", String(resources));
+    byId("page-title").textContent = resources ? "资源管理" : !connection ? "运行监控" : view === "runs" ? "Agent 运行轨迹" : "项目概览";
+    byId("entry-title").textContent = resources ? "Agent 资源管理" : "Agent 运行监控";
+    byId("entry-description").textContent = resources ? "查看当前发布启用的 Skill 和 Tool，核对每项资源的版本。" : "查看每次运行中用到的上下文、工具和模型，定位耗时与异常。";
+    byId("entry-switch").textContent = resources ? "打开运行监控" : "打开资源管理";
+    byId("entry-switch").href = resources ? "/monitor" : "/resources";
+    byId("product-name").textContent = resources ? "资源控制台" : "观测控制台";
+    byId("hours").closest("label").hidden = resources;
+    byId("crumb-product").textContent = resources ? "资源管理" : "运行监控";
+    document.title = (resources ? "资源管理" : "运行监控") + " · AgentOS";
   }
   function clearTrace() {
     byId("run-detail").hidden = true;
-    for (const id of ["trace-id","run-facts","trace","trace-note"]) byId(id).replaceChildren();
+    for (const id of ["trace-id","run-facts","trace","trace-note","waterfall"]) byId(id).replaceChildren();
   }
   function chooseRun(run) {
     instance = run;
@@ -538,6 +612,75 @@
     }
     return response.json();
   }
+  function chartSvg(tag, attributes) {
+    const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, String(value));
+    return element;
+  }
+  function countOf(value) {
+    return /^\d+$/.test(String(value)) ? BigInt(value) : null;
+  }
+  function share(value, total) {
+    return total > 0n && value != null ? Number(value * 1000000n / total) / 10000 : 0;
+  }
+  function renderStatusChart(s) {
+    const states = [["succeeded","#14816e"],["running","#5368cc"],["queued","#c58a33"],
+      ["failed","#cc4e5d"],["timed_out","#a96123"],["cancelled","#8390a5"]];
+    const ring = chartSvg("svg", {viewBox:"0 0 148 148", class:"state-ring", "aria-hidden":"true"});
+    const circle = {cx:74, cy:74, r:60, fill:"none", "stroke-width":13};
+    ring.append(chartSvg("circle", {...circle, class:"ring-track", stroke:"#e8edf1"}));
+    const legend = el("ul", "");
+    legend.className = "chart-legend";
+    const total = countOf(s.tasks);
+    let offset = 0;
+    for (const [state, color] of states) {
+      const value = countOf(s[state]);
+      const percent = share(value, total);
+      if (percent > 0) {
+        ring.append(chartSvg("circle", {...circle, class:"ring-segment", "data-state":state, stroke:color,
+          pathLength:100, transform:"rotate(-90 74 74)", "stroke-dasharray":[percent, 100 - percent].join(" "),
+          "stroke-dashoffset":-offset}));
+        offset += percent;
+      }
+      const item = el("li", "");
+      item.dataset.state = state;
+      const swatch = chartSvg("svg", {class:"state-key", "data-state":state, width:9, height:9, "aria-hidden":"true"});
+      swatch.append(chartSvg("circle", {cx:4.5, cy:4.5, r:4, fill:color}));
+      const name = el("span", stateNames[state]);
+      name.className = "state-label";
+      item.append(swatch, name, el("strong", value));
+      legend.append(item);
+    }
+    const number = chartSvg("text", {x:74, y:74, "text-anchor":"middle", class:"ring-number"});
+    const exact = String(total ?? "—");
+    // Keep long counts inside the ring; the metrics above retain the exact figure.
+    number.textContent = exact.length > 5 ? new Intl.NumberFormat("zh-CN", {notation:"compact"}).format(total) : exact;
+    const caption = chartSvg("text", {x:74, y:94, "text-anchor":"middle", class:"ring-caption"});
+    caption.textContent = "任务总数";
+    ring.append(number, caption);
+    byId("status-chart").replaceChildren(ring, legend);
+  }
+  function renderCallChart(s) {
+    const calls = [["tool","Tool 执行",countOf(s.tool_calls),"#5368cc"],
+      ["skill","Skill 加载",countOf(s.skill_calls),"#8562c6"],["model","模型准入",countOf(s.dispatches),"#14816e"]];
+    const maximum = calls.reduce((max, item) => item[2] != null && item[2] > max ? item[2] : max, 0n);
+    const chart = byId("call-chart");
+    chart.replaceChildren();
+    for (const [kind, label, count, color] of calls) {
+      const row = el("div", "");
+      row.className = "call-row";
+      row.dataset.kind = kind;
+      const name = el("span", label);
+      name.className = "call-label";
+      const amount = el("strong", count);
+      amount.className = "call-count";
+      const bar = chartSvg("svg", {class:"call-bar", width:"100%", height:6, "aria-hidden":"true"});
+      bar.append(chartSvg("rect", {x:0, y:0, width:"100%", height:6, rx:3, fill:"#e9edf2"}),
+        chartSvg("rect", {x:0, y:0, width:share(count, maximum) + "%", height:6, rx:3, fill:color}));
+      row.append(name, amount, bar);
+      chart.append(row);
+    }
+  }
   function renderSummary(data) {
     const s = data.summary;
     byId("scope").textContent = data.scope === "project" ? "全项目可见任务" : "当前主体可见任务";
@@ -546,12 +689,12 @@
     const metrics = byId("metrics");
     metrics.replaceChildren();
     for (const [name, value] of [
-      ["任务数",s.tasks],["成功 / 失败",[s.succeeded,s.failed].join(" / ")],
-      ["Skill 调用总数",s.skill_calls],["Tool 调用总数",s.tool_calls],
+      ["任务数",s.tasks],["Skill 调用总数",s.skill_calls],["Tool 调用总数",s.tool_calls],
+      ["已结算费用",money(s.settled_micros)],["成功 / 失败",[s.succeeded,s.failed].join(" / ")],
       ["排队 / 运行",[s.queued,s.running].join(" / ")],["取消 / 超时",[s.cancelled,s.timed_out].join(" / ")],
       ["有能力记录的任务",s.tasks_with_spans],
       ["模型准入次数",s.dispatches],["含用量的结算记录",s.usage_receipts],["待结算调用",s.pending_receipts],
-      ["已结算费用",money(s.settled_micros)],["预留费用",money(s.reserved_micros)],
+      ["预留费用",money(s.reserved_micros)],
       ["已知输入 Token",s.input_tokens],["已知输出 Token",s.output_tokens]
     ]) {
       const block = el("div", "");
@@ -559,6 +702,8 @@
       if (name === "待结算调用" && Number(value) > 0) block.className = "warning";
       metrics.append(block);
     }
+    renderStatusChart(s);
+    renderCallChart(s);
     const capabilities = byId("capabilities");
     capabilities.replaceChildren();
     byId("release").textContent = "发布版本 " + data.active_release.version_id;
@@ -602,6 +747,32 @@
     if (!data.recent_tasks.length) empty(tasks, 5, "该时间范围内没有可见任务。");
     byId("report").hidden = false;
   }
+  function clearInventory() {
+    inventory = [];
+    byId("resources").hidden = true;
+    for (const id of ["skill-inventory","tool-inventory","catalog-table","catalog-release"]) byId(id).replaceChildren();
+  }
+  function renderResourceTable() {
+    const table = byId("catalog-table");
+    table.replaceChildren();
+    const kind = byId("resource-type").value;
+    for (const item of inventory) {
+      if (kind && kind !== item.kind) continue;
+      const row = el("tr", "");
+      cell(row, item.name, "resource-name"); cell(row, kinds[item.kind]); cell(row, item.version);
+      cell(row, item.digest, "digest");
+      table.append(row);
+    }
+    if (!table.rows.length) empty(table, 4, "当前发布没有此类型的资源。");
+  }
+  function renderInventory(data) {
+    byId("skill-inventory").textContent = data.counts.skill;
+    byId("tool-inventory").textContent = data.counts.tool;
+    byId("catalog-release").textContent = data.agent_version_id;
+    inventory = data.resources;
+    renderResourceTable();
+    byId("resources").hidden = false;
+  }
   async function refresh() {
     if (!connection) return;
     if (view === "runs") return loadExplorer("agents");
@@ -610,17 +781,20 @@
     const request = projectRead = new AbortController();
     byId("status").textContent = "正在读取项目…";
     try {
-      const data = await read("/v1/projects/" + encodeURIComponent(connection.project) +
-        "/monitoring?hours=" + encodeURIComponent(byId("hours").value), request.signal);
+      const resourceView = view === "resources";
+      const path = resourceView ? "/resources" : "/monitoring?hours=" + encodeURIComponent(byId("hours").value);
+      const data = await read("/v1/projects/" + encodeURIComponent(connection.project) + path, request.signal);
       if (request.signal.aborted) return;
-      renderSummary(data);
+      if (data.project_id !== connection.project) throw new Error("project");
+      if (resourceView) renderInventory(data);
+      else renderSummary(data);
       showConnected();
       byId("status").textContent = "更新于 " + date(Date.now());
       if (selected) await showTask(selected, false);
     } catch (error) {
       if (request.signal.aborted) return;
       clearProject();
-      if (error.status === 401 || error.status === 403) disconnect();
+      if (error.status === 401 || error.status === 403 || byId("connection-state").dataset.active !== "true") disconnect();
       byId("status").textContent = error.status ? error.message : "无法读取监控数据，请检查连接后重试。";
     } finally {
       if (projectRead === request) { projectRead = null; schedule(); }
@@ -707,6 +881,94 @@
     if (!table.rows.length) empty(table, 5, "此页没有可见运行实例。");
     setPaging("instances", runPage, data.next_cursor);
   }
+  function waterfallRows(data) {
+    const calls = new Map(), milestones = [];
+    for (const e of data.events) {
+      if (String(e.attempt) !== String(data.attempt)) continue;
+      const delta = elapsedMs(data.started_at, e.occurred_at);
+      if (!Number.isFinite(delta) || delta < 0) continue;
+      const at = Math.round(delta * 1000);
+      if (e.kind === "task") {
+        milestones.push({kind:e.kind, label:eventNames[e.event] || e.event, from:at, to:at,
+          outcome:e.error_code || e.event === "failed" ? "failed" : "point", value:"+" + ms(at / 1000)});
+        continue;
+      }
+      const id = e.kind === "model" ? e.dispatch_attempt_id : e.span_id;
+      // A legacy event without an identifier can be drawn but cannot be paired.
+      const key = id ? e.kind + ":" + id : Symbol();
+      const call = calls.get(key) || {kind:e.kind, name:e.model || e.name, id};
+      if (e.event === "started" || e.event === "dispatch_admitted") call.start = at;
+      else {
+        call.end = at;
+        call.error = e.error_code || (e.event === "failed" ? "失败" : null);
+        if (typeof e.duration_ms === "number" && Number.isFinite(e.duration_ms) && e.duration_ms >= 0) {
+          call.duration = Math.round(e.duration_ms * 1000);
+        }
+      }
+      calls.set(key, call);
+    }
+    const rows = [...milestones];
+    for (const call of calls.values()) {
+      const {kind, name, id, start, end, duration, error} = call;
+      const from = start ?? (duration == null ? end : Math.max(0, end - duration));
+      const to = end ?? start;
+      const paired = start != null && end != null && end >= start;
+      const known = duration ?? (paired ? end - start : null);
+      const outcome = error ? "failed" : known != null ? "complete" : end == null ? "open" : "end";
+      const value = known != null ? ms(known / 1000) : end == null ? "本页仅开始" :
+        kind === "model" ? "本页仅结算" : "本页仅结束";
+      const label = [kinds[kind] || kind, name].filter(Boolean).join(" · ");
+      rows.push({kind, label, id, from, to:Math.max(from, to), outcome, value, error});
+    }
+    return rows.sort((a, b) => a.from - b.from);
+  }
+  function renderWaterfall(data) {
+    const panel = byId("waterfall");
+    const rows = waterfallRows(data);
+    panel.replaceChildren();
+    const note = el("p", rows.length
+      ? "相对本次领取时间 · 线段表示区间，圆点表示单个时间点。模型区间从发送准入计至费用结算。"
+      : "本页没有可定位的时间记录。");
+    note.className = "waterfall-note";
+    panel.append(note);
+    if (!rows.length) return;
+    const ended = elapsedMs(data.started_at, data.ended_at);
+    const limit = Math.max(Number.isFinite(ended) ? Math.round(ended * 1000) : 0, ...rows.map(row => row.to));
+    const axis = el("div", "");
+    axis.className = "waterfall-axis";
+    const range = el("span", "");
+    range.className = "waterfall-axis-range";
+    range.append(el("span", "0 ms"), el("span", limit ? ms(limit / 1000) : ""));
+    axis.append(el("span", "运行步骤"), range, el("span", "耗时 / 时间点"));
+    const list = el("div", "");
+    list.className = "waterfall-list";
+    const svgNS = "http://www.w3.org/2000/svg";
+    for (const step of rows) {
+      const row = el("div", ""), label = el("span", step.label), value = el("span", step.value);
+      row.className = "waterfall-row"; row.dataset.kind = step.kind; row.dataset.outcome = step.outcome;
+      label.className = "waterfall-label"; value.className = "waterfall-value";
+      if (step.error) value.append(document.createTextNode(" · " + step.error));
+      row.title = [step.label, step.id, "+" + ms(step.from / 1000), step.value, step.error].filter(Boolean).join(" · ");
+      const track = document.createElementNS(svgNS, "svg");
+      track.setAttribute("class", "waterfall-track");
+      track.setAttribute("width", "100%"); track.setAttribute("height", "18"); track.setAttribute("aria-hidden", "true");
+      const x = offset => (limit ? 100 * offset / limit : 0) + "%";
+      if (step.to > step.from) {
+        const line = document.createElementNS(svgNS, "line");
+        line.setAttribute("x1", x(step.from)); line.setAttribute("x2", x(step.to));
+        line.setAttribute("y1", "9"); line.setAttribute("y2", "9");
+        line.setAttribute("stroke", "currentColor"); line.setAttribute("stroke-width", "6");
+        line.setAttribute("stroke-linecap", "round"); track.append(line);
+      } else {
+        const point = document.createElementNS(svgNS, "circle");
+        point.setAttribute("cx", x(step.from)); point.setAttribute("cy", "9"); point.setAttribute("r", "3");
+        point.setAttribute("fill", "currentColor"); track.append(point);
+      }
+      row.append(label, track, value);
+      list.append(row);
+    }
+    panel.append(axis, list);
+  }
   function renderTrace(data, focus) {
     byId("run-detail").hidden = false;
     if (focus) byId("trace-heading").focus();
@@ -727,6 +989,7 @@
     const note = "第 " + (tracePage.previous.length + 1) + " 页 · " + data.events.length + " 个事件（本地时间）";
     byId("trace-note").textContent = [note, data.error_code,
       data.has_capability_spans ? "" : "本次运行没有可用的能力观测记录"].filter(Boolean).join(" · ");
+    renderWaterfall(data);
     renderEvents(byId("trace"), data.events);
     setPaging("events", tracePage, data.next_before);
   }
@@ -844,18 +1107,25 @@
     }
     if (!events.length) empty(table, 7, "尚无可见事件。");
   }
-  function switchView(next) {
+  function switchView(next, navigate = true) {
     if (view === next) return;
     projectRead?.abort(); taskRead?.abort();
     view = next;
+    const path = view === "resources" ? "/resources" : "/monitor";
+    if (navigate && path !== location.pathname) history.pushState(null, "", path);
     setViewButtons();
     byId("report").hidden = true;
+    clearInventory();
+    byId("resource-type").value = "";
     resetExplorer();
     clearDetail();
     refresh();
   }
   byId("overview-view").addEventListener("click", () => switchView("overview"));
   byId("runs-view").addEventListener("click", () => switchView("runs"));
+  byId("resources-view").addEventListener("click", () => switchView("resources"));
+  byId("resource-type").addEventListener("change", renderResourceTable);
+  window.addEventListener("popstate", () => switchView(initialView(), false));
   byId("agent-version").addEventListener("change", event => {
     agent = event.target.value; instance = null; runPage = pageState();
     byId("run-id").value = "";
@@ -895,6 +1165,7 @@
   byId("hours").addEventListener("change", () => { clearDetail(); resetExplorer(); refresh(); });
   document.addEventListener("visibilitychange", schedule);
   window.addEventListener("pagehide", disconnect);
+  setViewButtons();
 })();
 </script>
 </body>

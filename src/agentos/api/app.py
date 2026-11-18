@@ -28,6 +28,7 @@ class TaskStore(Protocol):
     def cancel_task(self, tenant_id, subject_id, task_id, idempotency_key,
                     expected_version, *, allowed_projects) -> dict: ...
     def get_snapshot(self, tenant_id, subject_id, snapshot_id, *, allowed_projects) -> dict: ...
+    def require_project_access(self, tenant_id, subject_id, project_id, *, allowed_projects) -> None: ...
     def get_monitoring(self, tenant_id, subject_id, project_id, *, allowed_projects,
                        include_all_subjects, hours, limit) -> dict: ...
     def get_timeline(self, tenant_id, subject_id, task_id, *, allowed_projects,
@@ -97,6 +98,12 @@ def error_response(request: Request, status: int, code: str, message: str) -> JS
 def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id: str,
                *, capability_catalog=()) -> FastAPI:
     app = FastAPI(title="AgentOS M1", version="1")
+    # Freeze the public projection at the same boundary as the active release ID.
+    resources = tuple(
+        {field: entry[field] for field in ("kind", "name", "version", "digest")}
+        for entry in capability_catalog if entry["kind"] in ("skill", "tool")
+    )
+    resource_counts = {kind: sum(entry["kind"] == kind for entry in resources) for kind in ("skill", "tool")}
 
     @app.middleware("http")
     async def request_metadata(request: Request, call_next):
@@ -126,11 +133,16 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
 
     bearer = HTTPBearer(auto_error=False)
 
-    def authenticate(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> Identity:
+    def verified_identity(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)]) -> Identity:
         header = f"{credentials.scheme} {credentials.credentials}" if credentials else None
         return authenticator.authenticate(header)
 
-    def project_identity(project_id: str, identity: Annotated[Identity, Depends(authenticate)]) -> Identity:
+    def task_identity(identity: Annotated[Identity, Depends(verified_identity)]) -> Identity:
+        if identity.monitor_only:
+            raise PlatformError("FORBIDDEN", "This credential grants access to monitoring metadata only")
+        return identity
+
+    def project_identity(project_id: str, identity: Annotated[Identity, Depends(verified_identity)]) -> Identity:
         if project_id not in identity.project_ids:
             raise PlatformError("FORBIDDEN", "Project outside credential scope")
         return identity
@@ -158,6 +170,7 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
             return JSONResponse(status_code=503, content={"status": "not_ready"})
         return {"status": "ready"}
 
+    @app.get("/resources", response_class=HTMLResponse, include_in_schema=False)
     @app.get("/monitor", response_class=HTMLResponse, include_in_schema=False)
     def dashboard():
         page = files("agentos.observability").joinpath("dashboard.html").read_text(encoding="utf-8")
@@ -169,7 +182,7 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
         })
 
     @app.post("/v1/tasks", status_code=202)
-    def submit(body: CreateTask, identity: Annotated[Identity, Depends(authenticate)],
+    def submit(body: CreateTask, identity: Annotated[Identity, Depends(task_identity)],
                operation: Annotated[str, Depends(idempotency_key)]):
         if body.project_id not in identity.project_ids:
             raise PlatformError("FORBIDDEN", "Project outside credential scope")
@@ -184,14 +197,14 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
                                  replay_only=body.agent_version_id != agent_version_id)
 
     @app.get("/v1/tasks/{task_id}")
-    def get_task(task_id: str, identity: Annotated[Identity, Depends(authenticate)], response: Response):
+    def get_task(task_id: str, identity: Annotated[Identity, Depends(task_identity)], response: Response):
         task = store.get_task(identity.tenant_id, identity.subject_id, task_id,
                               allowed_projects=identity.project_ids)
         response.headers["ETag"] = f'"{task["version"]}"'
         return task
 
     @app.post("/v1/tasks/{task_id}/cancel", status_code=202)
-    def cancel(task_id: str, identity: Annotated[Identity, Depends(authenticate)],
+    def cancel(task_id: str, identity: Annotated[Identity, Depends(task_identity)],
                operation: Annotated[str, Depends(idempotency_key)], response: Response,
                expected_version: Annotated[int, Depends(version)]):
         task = store.cancel_task(identity.tenant_id, identity.subject_id, task_id, operation,
@@ -201,7 +214,7 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
         return task
 
     @app.get("/v1/context-snapshots/{snapshot_id}")
-    def get_snapshot(snapshot_id: str, identity: Annotated[Identity, Depends(authenticate)]):
+    def get_snapshot(snapshot_id: str, identity: Annotated[Identity, Depends(task_identity)]):
         return store.get_snapshot(identity.tenant_id, identity.subject_id, snapshot_id,
                                   allowed_projects=identity.project_ids)
 
@@ -214,7 +227,14 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
                                         include_all_subjects=project_id in identity.monitor_project_ids,
                                         hours=hours, limit=limit)
         return {**overview, "active_release": {"version_id": agent_version_id,
-                                              "capabilities": capability_catalog}}
+                                              "capabilities": resources}}
+
+    @app.get("/v1/projects/{project_id}/resources")
+    def project_resources(project_id: str, identity: Annotated[Identity, Depends(project_identity)]):
+        store.require_project_access(identity.tenant_id, identity.subject_id, project_id,
+                                     allowed_projects=identity.project_ids)
+        return {"project_id": project_id, "agent_version_id": agent_version_id,
+                "counts": resource_counts, "resources": resources}
 
     def run_browser_options(project_id: str, identity: Annotated[Identity, Depends(project_identity)],
                             hours: Annotated[int, Query(ge=1, le=168)] = 24,
@@ -236,14 +256,14 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
         return store.get_agent_runs(identity.tenant_id, identity.subject_id, project_id, agent_version_id, **options)
 
     @app.get("/v1/tasks/{task_id}/timeline")
-    def task_timeline(task_id: str, identity: Annotated[Identity, Depends(authenticate)]):
+    def task_timeline(task_id: str, identity: Annotated[Identity, Depends(verified_identity)]):
         return store.get_timeline(identity.tenant_id, identity.subject_id, task_id,
                                   allowed_projects=identity.project_ids,
                                   monitor_project_ids=identity.monitor_project_ids)
 
     @app.get("/v1/tasks/{task_id}/runs/{attempt}/trace")
     def run_trace(task_id: str, attempt: Annotated[int, Path(ge=1, le=2**64 - 1)],
-                  identity: Annotated[Identity, Depends(authenticate)], before: PageCursor = None):
+                  identity: Annotated[Identity, Depends(verified_identity)], before: PageCursor = None):
         return store.get_run_trace(identity.tenant_id, identity.subject_id, task_id, attempt,
                                    allowed_projects=identity.project_ids,
                                    monitor_project_ids=identity.monitor_project_ids, before=before)

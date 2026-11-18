@@ -49,6 +49,22 @@ def start_context(store, task):
     return store.start_capability(task, "context", "prepare_context", "evidence/1", task["agent_version_id"])
 
 
+def test_ac012_023_resource_catalog_checks_current_project_membership(deployment):
+    store, tenant, _, _ = deployment
+    scope = {"allowed_projects": ("support",)}
+    store.require_project_access(tenant, "observer", "support", **scope)
+    for candidate, subject, projects in (
+        (tenant, "observer", ()), ("other-" + tenant, "observer", ("support",)), (tenant, "outsider", ("support",))
+    ):
+        with pytest.raises(PlatformError) as rejected:
+            store.require_project_access(candidate, subject, "support", allowed_projects=projects)
+        assert rejected.value.code == "FORBIDDEN"
+    store.set_access(tenant, "observer", "support", False)
+    with pytest.raises(PlatformError) as revoked:
+        store.require_project_access(tenant, "observer", "support", **scope)
+    assert revoked.value.code == "FORBIDDEN"
+
+
 def test_ac013_023_observe_starts_failure_success_and_snapshot_links(deployment):
     store, tenant, _, cap = deployment
     task = claim(deployment)

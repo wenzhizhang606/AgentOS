@@ -195,9 +195,13 @@ def _observable_task(cur, tenant, subject, task_id, allowed_projects, monitor_pr
     return row
 
 
-def _monitor_window(project, allowed_projects, hours, limit):
+def _require_project_scope(project, allowed_projects):
     if project not in allowed_projects:
         raise _error("FORBIDDEN")
+
+
+def _monitor_window(project, allowed_projects, hours, limit):
+    _require_project_scope(project, allowed_projects)
     if type(hours) is not int or not 1 <= hours <= 168 or type(limit) is not int or not 1 <= limit <= 200:
         raise _error("INVALID_ARGUMENT")
 
@@ -496,6 +500,10 @@ class MySQLStore:
             return run_trace.browse(cur, tenant, project, None if include_all_subjects else subject,
                                     _now(cur), hours, limit, cursor, release)
         return self._tx(work)
+
+    def require_project_access(self, tenant_id, subject_id, project_id, *, allowed_projects):
+        _require_project_scope(project_id, allowed_projects)
+        self._tx(lambda cur: _policy(cur, tenant_id, project_id, subject_id))
 
     def get_monitoring(self, tenant_id, subject_id, project_id, *, allowed_projects,
                        include_all_subjects=False, hours=24, limit=50):
