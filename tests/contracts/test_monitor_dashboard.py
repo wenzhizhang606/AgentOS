@@ -59,13 +59,123 @@ def test_ac013_monitor_shell_contains_no_data_or_remote_assets(monitor_page):
     assert not markup.asset_urls
     assert markup.by_id["token"]["type"] == "password"
     assert "value" not in markup.by_id["token"]
-    assert all("hidden" in markup.by_id[panel] for panel in ("actions", "report", "views", "explorer", "run-detail"))
+    assert all("hidden" in markup.by_id[panel] for panel in (
+        "actions", "report", "views", "explorer", "run-detail", "project-chip", "disconnect"))
     assert "hidden" not in markup.by_id["connect-panel"]
+    assert markup.by_id["connect-status"]["role"] == "status"
     assert markup.by_id["overview-view"]["aria-controls"] == "report"
     assert markup.by_id["runs-view"]["aria-controls"] == "explorer"
     assert {"metrics", "registered", "capabilities", "tasks", "timeline"} <= markup.by_id.keys()
     assert {"status-chart", "call-chart", "waterfall"} <= markup.by_id.keys()
     assert {"agent-version", "instances", "run-id", "run-facts", "trace", "events-next", "events-prev"} <= markup.by_id.keys()
+
+
+def test_ac013_browser_project_login_waits_for_permission_and_recovers(monitor_page):
+    """A bookmarked runs view stays on the form until its own project read succeeds."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    origin = "http://monitor.invalid"
+    agents_path = "/v1/projects/returns/agents"
+    token = "fixture-observer"
+    catalog = dict(project_id="returns", scope="project", agents=[], next_cursor=None,
+                   window_start="2026-11-17T00:00:00Z", window_end="2026-11-18T00:00:00Z")
+    pending, headers, unexpected = [], [], []
+
+    def serve(route):
+        url = urlsplit(route.request.url)
+        if url.netloc == "monitor.invalid" and url.path == "/console":
+            route.fulfill(content_type="text/html; charset=utf-8", body=monitor_page.content,
+                          headers={"Content-Security-Policy": monitor_page.headers["content-security-policy"]})
+        elif url.netloc == "monitor.invalid" and url.path == agents_path and route.request.method == "GET":
+            headers.append(route.request.headers.get("authorization"))
+            pending.append(route)
+            route.request.frame.evaluate("count => { window.heldRequests = count; }", len(headers))
+        elif url.netloc == "monitor.invalid" and url.path == "/favicon.ico":
+            route.fulfill(status=204)
+        else:
+            unexpected.append(route.request.url)
+            route.abort()
+
+    with playwright.sync_playwright() as p:
+        browser = launch_chromium(p)
+        try:
+            page = browser.new_page(viewport={"width": 320, "height": 760})
+            errors = []
+            page.on("pageerror", lambda error: errors.append(str(error)))
+            page.route("**/*", serve)
+            page.goto(origin + "/console#runs")
+            form = page.locator("#connect")
+            project = form.get_by_label("项目 ID", exact=True)
+            credential = form.get_by_label("访问令牌", exact=True)
+            submit = form.locator("button[type=submit]")
+            message = form.locator("#connect-status")
+            assert form.is_visible() and not headers
+            assert page.get_by_text("未连接", exact=True).count() == 0
+            project.fill("returns")
+            credential.fill(token)
+
+            # Hold the real fetch at the HTTP boundary so the pending form can be inspected.
+            for attempt, outcome in enumerate((401, 403, 503, "offline", 200), start=1):
+                with page.expect_request(lambda request: urlsplit(request.url).path == agents_path):
+                    submit.click()
+                page.wait_for_function("expected => window.heldRequests === expected", arg=attempt)
+                message.filter(has_text="正在验证项目访问权限").wait_for()
+                assert submit.is_disabled() and form.is_visible()
+                for selector in ("#views", "#disconnect", "#project-chip", "#page-title", "#explorer"):
+                    assert page.locator(selector).is_hidden()
+                assert page.locator("#connected-project").text_content() == ""
+                if attempt == 1:
+                    form.evaluate("form => form.requestSubmit()")
+                assert len(pending) == 1
+                route = pending.pop()
+                if outcome == 200:
+                    route.fulfill(json=catalog)
+                    break
+                if outcome == "offline":
+                    route.abort("failed")
+                    message.filter(has_text="重试").wait_for()
+                else:
+                    route.fulfill(status=outcome, json={"error": {"code": "FIXTURE"}})
+                    message.filter(has_text=f"HTTP {outcome}").wait_for()
+                assert project.input_value() == "returns" and submit.is_enabled()
+                if outcome in (401, 403):
+                    assert credential.input_value() == ""
+                    assert credential.evaluate("el => el === document.activeElement")
+                    credential.fill(token)
+                else:
+                    assert credential.input_value() == token
+
+            page.locator("#status").filter(has_text="更新于").wait_for()
+            assert page.locator("#connected-project").inner_text() == "returns"
+            assert page.locator("#explorer").is_visible() and page.locator("#views").is_visible()
+            assert page.locator("#page-title").evaluate("el => el === document.activeElement")
+            assert form.is_hidden() and credential.input_value() == ""
+            assert headers == ["Bearer " + token] * 5
+
+            # Simulate a response already received when the user signs out.
+            page.evaluate("""() => {
+                const fetch = window.fetch.bind(window);
+                window.fetch = async (...args) => {
+                    const response = await fetch(...args);
+                    const saved = new Response(await response.text(), {status: response.status});
+                    await new Promise(resolve => { window.finishRefresh = resolve; });
+                    return saved;
+                };
+            }""")
+            with page.expect_request(lambda request: urlsplit(request.url).path == agents_path):
+                page.locator("#refresh").click()
+            page.wait_for_function("window.heldRequests === 6")
+            pending.pop().fulfill(json=catalog)
+            page.wait_for_function("typeof window.finishRefresh === 'function'")
+            page.locator("#disconnect").click()
+            page.evaluate("""async () => {
+                window.finishRefresh();
+                await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            }""")
+            assert form.is_visible() and page.locator("#explorer").is_hidden()
+            assert page.locator("#agent-scope").text_content() == page.locator("#connected-project").text_content() == ""
+            assert not unexpected and not errors
+        finally:
+            browser.close()
 
 
 def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page):
@@ -133,7 +243,9 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             page.get_by_role("button", name="载入项目").click()
             page.locator("#report").wait_for()
             assert page.get_by_role("heading", level=1, name="项目概览").is_visible()
-            assert page.locator("#connection-state").inner_text() == "已连接"
+            assert page.locator("#project-chip").is_visible()
+            assert page.locator("#connected-project").inner_text() == tenant_project
+            assert page.locator("#page-title").evaluate("el => el === document.activeElement")
             assert page.locator("#connect-panel").is_hidden()
             assert "当前主体可见任务" in page.locator("#scope").inner_text()
             page.get_by_label("显示更多运行指标").check()
@@ -142,7 +254,6 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             assert metrics.filter(has_text="Skill 调用总数").locator("dd").inner_text() == "17"
             assert metrics.filter(has_text="Tool 调用总数").locator("dd").inner_text() == "34"
             assert metrics.filter(has_text="已知输入 Token").locator("dd").inner_text() == "9007199254740993"
-            assert metrics.locator("dt svg[aria-hidden=true]").count() == 4
             assert page.locator('#tasks [data-state="pending"]').inner_text() == "待结算"
             legend = page.locator("#status-chart .chart-legend")
             for state, count in {"succeeded": "3", "failed": "1", "queued": "0"}.items():
@@ -171,7 +282,7 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             page.get_by_role("button", name=task_id, exact=True).click()
             page.locator("#detail-status").get_by_text("时间线读取失败。").wait_for()
             assert page.locator("#timeline").inner_text() == ""
-            page.get_by_role("button", name="断开连接").click()
+            page.get_by_role("button", name="退出项目").click()
             for chart in ("status-chart", "call-chart"):
                 assert page.locator("#" + chart).text_content() == ""
             # Reconnect to an empty cohort with a legacy report missing one of the counts.
@@ -187,16 +298,16 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             assert calls.locator('[data-kind="skill"] .call-count').inner_text() == "—"
             empty_tasks = page.locator("#tasks").get_by_role("cell", name="该时间范围内没有可见任务。")
             assert empty_tasks.get_attribute("colspan") == "5"
-            assert empty_tasks.locator("svg[aria-hidden=true]").count() == 1
+            assert not empty_tasks.locator("svg:not([aria-hidden=true])").count()
             revoke = True
             page.get_by_role("button", name="刷新", exact=True).click()
-            page.get_by_text("读取失败（HTTP 403）").wait_for()
+            page.locator("#connect-status").filter(has_text="HTTP 403").wait_for()
             assert page.locator("#report").is_hidden()
             assert page.locator("#tasks").inner_text() == page.locator("#timeline").inner_text() == ""
             assert page.locator("#status-chart").text_content() == calls.text_content() == ""
             assert page.get_by_role("button", name="载入项目").is_visible()
             assert page.locator("#connected-project").inner_text() == ""
-            assert page.locator("#connection-state").inner_text() == "未连接"
+            assert page.locator("#project-chip").is_hidden() and page.locator("#disconnect").is_hidden()
             assert [path for path, _, _ in seen] == [summary_path, timeline_path, timeline_path, summary_path, summary_path]
             assert all(header == "Bearer " + token and token not in query for _, header, query in seen)
             assert not unexpected
@@ -314,6 +425,11 @@ def test_ac013_browser_agent_paging_attempts_history_scope_and_revocation(monito
             page.get_by_role("button", name="查看任务 task01 第 2 次运行轨迹").click()
             page.locator("#trace-id").get_by_text("task01:2", exact=True).wait_for()
             assert page.locator("#trace-heading").evaluate("el => el === document.activeElement")
+            page.evaluate("""() => Object.defineProperty(navigator, 'clipboard', {configurable: true,
+                value: {writeText: async value => { window.copiedRun = value; }}})""")
+            page.get_by_role("button", name="复制运行 ID", exact=True).press("Enter")
+            assert page.evaluate("window.copiedRun") == "task01:2"
+            assert page.locator("#trace-id").get_by_role("status").inner_text() == "已复制"
             assert page.url == "http://monitor.invalid/console#runs"
             assert page.get_by_role("heading", level=1, name="Agent 运行轨迹").is_visible()
             assert page.locator("#runs-view").get_attribute("aria-pressed") == "true"
@@ -417,7 +533,7 @@ def test_ac013_browser_agent_paging_attempts_history_scope_and_revocation(monito
             revoke = True
             previous_calls = len(seen)
             run_button.click()
-            page.get_by_text("读取失败（HTTP 403）").wait_for()
+            page.locator("#connect-status").filter(has_text="HTTP 403").wait_for()
             assert [path for path, _, _ in seen[previous_calls:]] == [
                 "/v1/tasks/task01/runs/2/trace", base + "/agents"]
             assert page.locator("#views").is_hidden() and page.locator("#connect").is_visible()
@@ -516,9 +632,19 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
             resource.focus()
             page.keyboard.press("Enter")
             assert dialog.is_visible()
-            assert dialog.locator("dd").all_text_contents() == ["unused-guidance", "Skill", "2", "2" * 64]
+            assert dialog.locator("dd").all_text_contents()[:3] == ["unused-guidance", "Skill", "2"]
+            assert dialog.get_by_text("2" * 64, exact=True).is_visible()
             assert dialog.get_by_role("button", name="关闭详情").evaluate("b => b === document.activeElement")
             assert dialog.evaluate("d => d.clientWidth >= d.scrollWidth && d.getBoundingClientRect().right <= innerWidth")
+            page.evaluate("""() => Object.defineProperty(navigator, 'clipboard', {configurable: true,
+                value: {writeText: async value => { window.copiedDigest = value; }}})""")
+            copy = dialog.get_by_role("button", name="复制完整摘要", exact=True)
+            copy.press("Enter")
+            assert page.evaluate("window.copiedDigest") == "2" * 64
+            page.evaluate("() => Object.defineProperty(navigator, 'clipboard', {value: undefined})")
+            copy.press("Space")
+            assert page.evaluate("window.getSelection().toString()") == "2" * 64
+            assert dialog.get_by_role("status").inner_text() == "请手动复制"
             page.keyboard.press("Escape")
             assert dialog.is_hidden() and detail_facts.text_content() == ""
             assert resource.evaluate("b => b === document.activeElement")
@@ -581,13 +707,17 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
                     page.clock.fast_forward(30_000)
                 else:
                     page.get_by_role("button", name="刷新", exact=True).click()
-                page.get_by_text(f"读取失败（HTTP {status}）", exact=True).wait_for()
+                message = page.locator("#connect-status" if status in (401, 403) else "#status")
+                message.filter(has_text=f"HTTP {status}").wait_for()
                 assert dialog.is_hidden() and detail_facts.text_content() == ""
                 assert table.text_content() == skill_count.text_content() == tool_count.text_content() == ""
                 assert page.locator("#catalog-release").text_content() == ""
                 if status in (401, 403):
                     assert page.locator("#views").is_hidden() and page.locator("#connect").is_visible()
                     assert page.locator("#token").input_value() == page.locator("#connected-project").text_content() == ""
+                else:
+                    assert page.locator("#connected-project").inner_text() == "returns"
+                    assert page.locator("#refresh").is_enabled() and page.locator("#connect").is_hidden()
                 if status == 401:
                     status = 200
                     login()

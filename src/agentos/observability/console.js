@@ -1,7 +1,7 @@
 "use strict";
 (() => {
   const byId = id => document.getElementById(id);
-  const {el, svgElement, cell, stateCell, empty, facts, rowAction} = ConsoleUI;
+  const {el, svgElement, cell, stateCell, empty, facts, rowAction, copyValue} = ConsoleUI;
   const stateNames = {queued:"排队中", running:"运行中", succeeded:"成功", failed:"失败", cancelled:"已取消", timed_out:"已超时", superseded:"已被后续尝试接替"};
   const accounting = {pending:"待结算", final:"已结算", no_dispatch:"无模型准入"};
   const eventNames = {queued:"进入队列", claimed:"领取任务", started:"开始", succeeded:"完成", failed:"失败",
@@ -18,6 +18,9 @@
   function pageState() { return {previous:[], cursor:null, next:null}; }
   let agentPage = pageState(), runPage = pageState(), tracePage = pageState();
   const date = value => value ? new Date(value).toLocaleString("zh-CN", {hour12:false}) : "—";
+  const periodFormat = new Intl.DateTimeFormat("zh-CN", {year:"numeric", month:"2-digit", day:"2-digit",
+    hour:"2-digit", minute:"2-digit", hourCycle:"h23"});
+  const periodDate = value => value ? periodFormat.format(new Date(value)) : "—";
   const eventTime = value => value ? date(value) + (value.match(/\.\d+(?=Z$)/)?.[0] ?? "") : "—";
   function elapsedMs(start, end) {
     if (!start || !end) return null;
@@ -34,7 +37,7 @@
   }
   function schedule() {
     clearTimeout(timer);
-    if (connection && byId("automatic").checked && !document.hidden) {
+    if (connection?.verified && byId("automatic").checked && !document.hidden) {
       timer = setTimeout(refresh, 30000);
     }
   }
@@ -51,27 +54,48 @@
     for (const id of ["metrics","status-chart","call-chart","capabilities","tasks","scope","window","task-count","registered","release","cap-status"]) byId(id).replaceChildren();
   }
   function showConnection() {
-    const open = connection !== null;
-    for (const id of ["connect-panel", "connect-nav"]) byId(id).hidden = open;
-    for (const id of ["actions", "views"]) byId(id).hidden = !open;
-    byId("connected-project").textContent = connection?.project ?? "";
-    byId("connection-state").textContent = open ? "连接中" : "未连接";
-    byId("connection-state").dataset.active = "false";
+    const open = connection?.verified === true;
+    const checking = connection !== null && !open;
+    byId("connect-panel").hidden = open;
+    for (const id of ["actions","views","project-chip","disconnect","status"]) byId(id).hidden = !open;
+    byId("connected-project").textContent = open ? connection.project : "";
+    byId("connect").querySelector("button[type=submit]").disabled = checking;
+    byId("project").readOnly = checking;
+    byId("token").readOnly = checking;
     setViewButtons();
   }
-  function showConnected() {
-    byId("connection-state").textContent = "已连接";
-    byId("connection-state").dataset.active = "true";
+  function openProject() {
+    if (connection.verified) return;
+    connection.verified = true;
+    byId("token").value = "";
+    byId("connect-status").textContent = "";
+    showConnection();
+    byId("page-title").focus();
   }
-  function disconnect() {
+  function disconnect({message = "", keepToken = false} = {}) {
     clearTimeout(timer);
     projectRead?.abort(); projectRead = null; connection = null;
     clearProject();
     view = initialView();
     showConnection();
     byId("automatic").checked = false;
-    byId("token").value = "";
+    if (!keepToken) byId("token").value = "";
     byId("status").textContent = "";
+    byId("connect-status").textContent = message;
+    byId("connect-status").dataset.tone = message ? "error" : "";
+  }
+  function returnToLogin(error) {
+    const denied = error.status === 401 || error.status === 403;
+    if (connection?.verified && !denied) return false;
+    let message;
+    if (error.status === 401) message = "访问令牌无效或已过期（HTTP 401）。请输入有效令牌。";
+    else if (error.status === 403) message = "没有此项目的观察权限（HTTP 403）。请核对项目 ID 和令牌权限。";
+    else if (error.status === 404) message = "无法访问该项目（HTTP 404）。请核对项目 ID 与访问权限。";
+    else message = "暂时无法载入项目" + (error.status ? "（HTTP " + error.status + "）" : "") + "。请重试。";
+    disconnect({message, keepToken:!denied});
+    if (denied) byId("token").focus();
+    else byId("connect").querySelector("button[type=submit]").focus();
+    return true;
   }
   function setViewButtons() {
     const resources = view === "resources";
@@ -79,10 +103,9 @@
     byId("runs-view").setAttribute("aria-pressed", String(view === "runs"));
     byId("resources-view").setAttribute("aria-pressed", String(resources));
     const name = resources ? "资源管理" : view === "runs" ? "Agent 运行轨迹" : "项目概览";
-    byId("page-title").textContent = connection ? name : "AgentOS 控制台";
+    byId("page-title").textContent = name;
     byId("hours").closest("label").hidden = resources;
-    byId("crumb-product").textContent = name;
-    document.title = connection ? name + " · AgentOS 控制台" : "AgentOS 控制台";
+    document.title = connection?.verified ? name + " · AgentOS 控制台" : "AgentOS 控制台";
   }
   function clearTrace() {
     byId("run-detail").hidden = true;
@@ -111,8 +134,9 @@
     clearRuns();
   }
   async function read(path, signal) {
+    const deadline = AbortSignal.any([signal, AbortSignal.timeout(30000)]);
     const response = await fetch(path, {method:"GET", cache:"no-store", redirect:"error",
-      credentials:"omit", mode:"same-origin", referrerPolicy:"no-referrer", signal,
+      credentials:"omit", mode:"same-origin", referrerPolicy:"no-referrer", signal:deadline,
       headers:{"Accept":"application/json","Authorization":"Bearer " + connection.token}});
     if (!response.ok) {
       const error = new Error("读取失败（HTTP " + response.status + "）");
@@ -190,13 +214,13 @@
   function renderSummary(data) {
     const s = data.summary;
     byId("scope").textContent = data.scope === "project" ? "全项目可见任务" : "当前主体可见任务";
-    byId("window").textContent = "任务创建时间 " + date(data.window_start) + " 至 " + date(data.window_end) +
-      "（本地时间） · 状态、费用取本次读取值";
+    byId("window").textContent = "创建时间（本地） " + periodDate(data.window_start) + " – " + periodDate(data.window_end);
     facts(byId("metrics"), [
       ["任务数",s.tasks,{icon:"tasks"}],["Skill 调用总数",s.skill_calls,{icon:"skill"}],
       ["Tool 调用总数",s.tool_calls,{icon:"tool"}],["已结算费用",money(s.settled_micros),{icon:"cost"}],
-      ["成功 / 失败",[s.succeeded,s.failed].join(" / ")],
-      ["排队 / 运行",[s.queued,s.running].join(" / ")],["取消 / 超时",[s.cancelled,s.timed_out].join(" / ")],
+      ["成功 / 失败",[s.succeeded ?? "—",s.failed ?? "—"].join(" / ")],
+      ["排队 / 运行",[s.queued ?? "—",s.running ?? "—"].join(" / ")],
+      ["取消 / 超时",[s.cancelled ?? "—",s.timed_out ?? "—"].join(" / ")],
       ["有能力记录的任务",s.tasks_with_spans],
       ["模型准入次数",s.dispatches],["含用量的结算记录",s.usage_receipts],
       ["待结算调用",s.pending_receipts,{warning:countOf(s.pending_receipts) > 0n}],
@@ -228,7 +252,7 @@
       capabilities.append(row);
     }
     if (!data.capabilities.length) empty(capabilities, 9, "该范围内暂无能力执行记录。");
-    byId("task-count").textContent = "显示 " + data.recent_tasks.length + " 项，选择任务 ID 查看事件。";
+    byId("task-count").textContent = "显示 " + data.recent_tasks.length + " 项";
     const tasks = byId("tasks");
     tasks.replaceChildren();
     for (const t of data.recent_tasks) {
@@ -261,7 +285,8 @@
   }
   function showResourceDetail(item) {
     facts(byId("resource-detail-facts"), [
-      ["资源名称",item.name],["类型",kinds[item.kind]],["版本",item.version],["完整摘要（SHA-256）",item.digest]
+      ["资源名称",item.name],["类型",kinds[item.kind]],["版本",item.version],
+      ["完整摘要（SHA-256）",item.digest,{copyLabel:"完整摘要"}]
     ]);
     byId("resource-detail").showModal();
   }
@@ -324,13 +349,13 @@
       if (data.project_id !== connection.project) throw new Error("project");
       if (resourceView) renderInventory(data);
       else renderSummary(data);
-      showConnected();
+      openProject();
       byId("status").textContent = "更新于 " + date(Date.now());
       if (selected) await showTask(selected, false);
     } catch (error) {
       if (request.signal.aborted) return;
+      if (returnToLogin(error)) return;
       clearProject();
-      if (error.status === 401 || error.status === 403 || byId("connection-state").dataset.active !== "true") disconnect();
       byId("status").textContent = error.status ? error.message : "无法读取监控数据，请检查连接后重试。";
     } finally {
       if (projectRead === request) { projectRead = null; schedule(); }
@@ -497,7 +522,7 @@
   function renderTrace(data, focus) {
     byId("run-detail").hidden = false;
     if (focus) byId("trace-heading").focus();
-    byId("trace-id").replaceChildren(el("code", data.run_id),
+    byId("trace-id").replaceChildren(copyValue(data.run_id, "运行 ID"),
       document.createTextNode(" · " + [data.profile, "发布版本 " + data.agent_version_id].filter(Boolean).join(" · ")));
     const bill = data.accounting;
     facts(byId("run-facts"), [
@@ -522,7 +547,7 @@
     const request = projectRead = new AbortController();
     const root = "/v1/projects/" + encodeURIComponent(connection.project) + "/agents";
     let stage = level;
-    byId("explorer").hidden = false;
+    byId("explorer").hidden = !connection.verified;
     byId("status").textContent = "正在读取运行记录…";
     try {
       if (level === "agents") {
@@ -531,7 +556,8 @@
         if (data.project_id !== connection.project) throw new Error("project");
         if (missingRun && data.agents.some(a => a.agent_version_id === missingRun.version)) agent = missingRun.version;
         renderAgents(data);
-        showConnected();
+        openProject();
+        byId("explorer").hidden = false;
       }
       if (agent && level !== "trace") {
         stage = "runs";
@@ -562,6 +588,7 @@
       byId("status").textContent = missingRun ? "这次运行不存在或在当前权限下不可见。" : "更新于 " + date(Date.now());
     } catch (error) {
       if (request.signal.aborted) return;
+      if (returnToLogin(error)) return;
       if (stage === "trace" && error.status === 404) {
         // A trace hides revoked access behind 404. Rebuild visible lists only after a fresh project check.
         const version = agent, typedId = byId("run-id").value;
@@ -569,8 +596,7 @@
         byId("run-id").value = typedId;
         return loadExplorer("agents", false, {version});
       }
-      if (error.status === 401 || error.status === 403) disconnect();
-      else if (stage === "trace") chooseRun(null);
+      if (stage === "trace") chooseRun(null);
       else if (stage === "runs") { instance = null; clearRuns(); }
       else { resetExplorer(); byId("explorer").hidden = false; }
       byId("status").textContent = error.status ? error.message : "无法读取运行轨迹，请检查连接后刷新。";
@@ -600,9 +626,7 @@
       renderEvents(table, data.events, id);
     } catch (error) {
       if (request.signal.aborted) return;
-      if (error.status === 401 || error.status === 403) {
-        disconnect(); byId("status").textContent = error.message;
-      } else {
+      if (!returnToLogin(error)) {
         byId("detail-status").textContent = error.status ? error.message : "时间线读取失败。";
       }
     }
@@ -694,22 +718,28 @@
   }
   byId("connect").addEventListener("submit", event => {
     event.preventDefault();
+    if (connection) return;
     const project = byId("project").value.trim(), token = byId("token").value.trim();
     if (!project || !token || project === "." || project === "..") {
-      byId("status").textContent = "请填写有效的项目 ID 和访问令牌。";
+      byId("connect-status").textContent = "请填写有效的项目 ID 和访问令牌。";
+      byId("connect-status").dataset.tone = "error";
       return;
     }
-    disconnect();
-    connection = {project,token};
+    connection = {project,token,verified:false};
+    byId("connect-status").textContent = "正在验证项目访问权限…";
+    byId("connect-status").dataset.tone = "";
     showConnection();
     refresh();
   });
-  byId("disconnect").addEventListener("click", disconnect);
+  byId("disconnect").addEventListener("click", () => {
+    disconnect();
+    byId("project").focus();
+  });
   byId("refresh").addEventListener("click", refresh);
   byId("automatic").addEventListener("change", schedule);
   byId("hours").addEventListener("change", () => { clearDetail(); resetExplorer(); refresh(); });
   document.addEventListener("visibilitychange", schedule);
-  window.addEventListener("pagehide", disconnect);
+  window.addEventListener("pagehide", () => disconnect());
   history.replaceState(null, "", viewUrl(view));
-  setViewButtons();
+  showConnection();
 })();

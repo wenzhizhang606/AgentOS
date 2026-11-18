@@ -57,6 +57,35 @@ const ConsoleUI = (() => {
     return node;
   }
 
+  function copyValue(value, label) {
+    const wrapper = el("span", "");
+    wrapper.className = "copy-value";
+    const code = el("code", value);
+    wrapper.append(code);
+    if (!value) return wrapper;
+    const feedback = el("span", "");
+    feedback.className = "copy-feedback";
+    feedback.setAttribute("role", "status");
+    const button = rowAction("复制", async () => {
+      try {
+        await navigator.clipboard.writeText(value);
+        feedback.textContent = "已复制";
+      } catch {
+        if (!code.isConnected) return;
+        const selection = document.getSelection();
+        if (selection) {
+          const range = document.createRange();
+          range.selectNodeContents(code);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+        feedback.textContent = "请手动复制";
+      }
+    }, "copy-action", "复制" + label);
+    wrapper.append(button, feedback);
+    return wrapper;
+  }
+
   function empty(tbody, columns, message) {
     const row = el("tr", "");
     const messageCell = cell(row, "", "note ui-empty");
@@ -77,14 +106,15 @@ const ConsoleUI = (() => {
       const term = el("dt", label);
       term.className = "ui-fact__label";
       if (options.icon) term.prepend(icon(options.icon, "ui-fact__icon"));
-      const description = el("dd", options.statusLabels ? "" : value);
+      const description = el("dd", value);
       description.className = "ui-fact__value";
-      if (options.statusLabels) description.append(statusChip(value, options.statusLabels));
+      if (options.statusLabels) description.replaceChildren(statusChip(value, options.statusLabels));
+      if (options.copyLabel) description.replaceChildren(copyValue(value, options.copyLabel));
       item.append(term, description);
       fragment.append(item);
     }
     container.replaceChildren(fragment);
   }
 
-  return Object.freeze({el, svgElement, cell, stateCell, rowAction, empty, facts});
+  return Object.freeze({el, svgElement, cell, stateCell, rowAction, copyValue, empty, facts});
 })();
