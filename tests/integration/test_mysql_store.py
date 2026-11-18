@@ -181,7 +181,9 @@ def test_ac010_release_registration_is_bound_to_canonical_manifest(db):
     manifest = {"model": "示例", "tenant_marker": tenant, "revision": 1}
     encoded = json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     version_id = sha256(encoded).hexdigest()
+    assert not store.ready(version_id)
     store.register_release(version_id, manifest)
+    assert store.ready(version_id)
     store.register_release(version_id, dict(reversed(list(manifest.items()))))
     with pytest.raises(PlatformError) as changed:
         store.register_release(version_id, dict(manifest, revision=2))

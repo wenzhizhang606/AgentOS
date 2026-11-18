@@ -21,6 +21,7 @@ def main():
     api.add_argument("--host", default="127.0.0.1")
     api.add_argument("--port", type=int, default=8000)
     commands.add_parser("worker", help="run a worker for the configured release")
+    commands.add_parser("worker-healthcheck", help="check this worker's local polling heartbeat")
     for action in ("grant", "revoke"):
         access = commands.add_parser(action, help=f"{action} a subject's project access")
         access.add_argument("tenant")
@@ -45,6 +46,11 @@ def main():
     receipt.add_argument("--input-tokens", type=int)
     receipt.add_argument("--output-tokens", type=int)
     args = parser.parse_args()
+    if args.command == "worker-healthcheck":
+        from agentos.worker.service import heartbeat_is_recent
+
+        path = os.environ.get("AGENTOS_WORKER_HEARTBEAT_FILE")
+        raise SystemExit(0 if path and heartbeat_is_recent(Path(path)) else 1)
     if args.command == "score":
         from agentos.evaluation.support import score_files
         print(json.dumps(score_files(args.cases, args.observations), ensure_ascii=False, indent=2))
@@ -79,7 +85,8 @@ def main():
 
         logging.basicConfig(level=logging.INFO)
         model = ChatModel(release.endpoint, os.environ["AGENTOS_MODEL_API_KEY"], timeout_seconds=30)
-        serve(store, model, release)
+        path = os.environ.get("AGENTOS_WORKER_HEARTBEAT_FILE")
+        serve(store, model, release, heartbeat_path=Path(path) if path else None)
     elif args.command in {"grant", "revoke"}:
         store.set_access(args.tenant, args.subject, args.project, args.command == "grant")
     elif args.command == "put-source":

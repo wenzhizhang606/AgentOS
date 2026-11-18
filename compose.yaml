@@ -1,0 +1,141 @@
+name: agentos
+
+x-app: &app
+  image: ${COMPOSE_PROJECT_NAME:-agentos}-runtime:local
+  pull_policy: never
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+
+x-db-connection: &db-connection
+  AGENTOS_MYSQL_HOST: mysql
+  AGENTOS_MYSQL_PORT: "3306"
+  AGENTOS_MYSQL_DATABASE: agentos
+
+x-runtime-env: &runtime-env
+  <<: *db-connection
+  AGENTOS_MYSQL_USER: agentos_app
+  AGENTOS_MYSQL_PASSWORD: ${AGENTOS_MYSQL_PASSWORD:?Set the runtime database password}
+  AGENTOS_RELEASE_FILE: /run/agentos/release.json
+
+x-release: &release
+  type: bind
+  source: ./local/release.json
+  target: /run/agentos/release.json
+  read_only: true
+  bind:
+    create_host_path: false
+
+x-after-migration: &after-migration
+  mysql:
+    condition: service_healthy
+  migrate:
+    condition: service_completed_successfully
+
+services:
+  mysql:
+    image: mysql:8.4.13
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: agentos
+      MYSQL_ROOT_HOST: localhost
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set the database root password}
+      MYSQL_USER: agentos_migrator
+      MYSQL_PASSWORD: ${AGENTOS_MIGRATION_PASSWORD:?Set the migration database password}
+      AGENTOS_MYSQL_PASSWORD: ${AGENTOS_MYSQL_PASSWORD:?Set the runtime database password}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - type: bind
+        source: ./deploy/mysql-init
+        target: /docker-entrypoint-initdb.d
+        read_only: true
+        bind:
+          create_host_path: false
+    networks: [database]
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          MYSQL_PWD="$$AGENTOS_MYSQL_PASSWORD" mysql --protocol=tcp --host=127.0.0.1
+          --user=agentos_app --database=agentos --connect-timeout=3
+          --execute='SELECT 1' >/dev/null
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  migrate:
+    <<: *app
+    build: .
+    pull_policy: build
+    command: ["python", "/app/deploy/migrate.py"]
+    environment:
+      <<: *db-connection
+      AGENTOS_MYSQL_USER: agentos_migrator
+      AGENTOS_MYSQL_PASSWORD: ${AGENTOS_MIGRATION_PASSWORD:?Set the migration database password}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [database]
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["agentos", "api", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+    environment:
+      <<: *runtime-env
+      AGENTOS_CREDENTIALS_FILE: /run/agentos/credentials.json
+    volumes:
+      - *release
+      - type: bind
+        source: ./local/credentials.json
+        target: /run/agentos/credentials.json
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on: *after-migration
+    networks: [database, application]
+    ports:
+      - "127.0.0.1:${AGENTOS_API_PORT:-8000}:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/readyz', timeout=4).close()"
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+
+  worker:
+    <<: *app
+    command: ["agentos", "worker"]
+    restart: unless-stopped
+    stop_grace_period: 3m
+    environment:
+      <<: *runtime-env
+      AGENTOS_MODEL_API_KEY: ${AGENTOS_MODEL_API_KEY:?Set the deployed model API key}
+      AGENTOS_WORKER_HEARTBEAT_FILE: /tmp/agentos-worker.heartbeat
+    volumes:
+      - *release
+    depends_on: *after-migration
+    networks: [database, application]
+    healthcheck:
+      test: ["CMD", "agentos", "worker-healthcheck"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  mysql-data:
+
+networks:
+  database:
+    internal: true
+  application:

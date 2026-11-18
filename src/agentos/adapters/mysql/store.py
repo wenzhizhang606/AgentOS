@@ -221,6 +221,20 @@ class MySQLStore:
                    user=os.environ["AGENTOS_MYSQL_USER"], password=os.environ["AGENTOS_MYSQL_PASSWORD"],
                    database=os.environ["AGENTOS_MYSQL_DATABASE"])
 
+    def ready(self, version_id):
+        """Check this API's runtime account, schema and pinned release on the primary."""
+        try:
+            with pymysql.connect(**self._connection, autocommit=True, connect_timeout=2,
+                                 read_timeout=2, write_timeout=2) as conn, conn.cursor() as cur:
+                # LIMIT 0 checks the migrated columns without reading tenant data.
+                cur.execute("""SELECT t.monitor_created_at,s.snapshot_id FROM ag_task t
+                               LEFT JOIN ag_capability_span s ON s.task_id=t.task_id LIMIT 0""")
+                cur.execute("""SELECT 1 FROM ag_release WHERE version_id=%s
+                               AND @@GLOBAL.read_only=0 AND @@GLOBAL.super_read_only=0""", (version_id,))
+                return cur.fetchone() is not None
+        except pymysql.MySQLError:
+            return False
+
     def _tx(self, work):
         for attempt in range(3):
             conn = None

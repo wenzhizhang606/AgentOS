@@ -18,6 +18,7 @@ from agentos.governance.auth import Authenticator, Identity
 
 
 class TaskStore(Protocol):
+    def ready(self, version_id: str) -> bool: ...
     def create_task(self, tenant_id, subject_id, idempotency_key, request: dict,
                     *, replay_only: bool = False) -> dict: ...
     def get_task(self, tenant_id, subject_id, task_id, *, allowed_projects) -> dict: ...
@@ -132,6 +133,16 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
         if result > 2**63 - 1:
             raise PlatformError("INVALID_ARGUMENT", "If-Match is out of range")
         return result
+
+    @app.get("/healthz", include_in_schema=False)
+    def liveness():
+        return {"status": "alive"}
+
+    @app.get("/readyz", include_in_schema=False)
+    def readiness():
+        if not store.ready(agent_version_id):
+            return JSONResponse(status_code=503, content={"status": "not_ready"})
+        return {"status": "ready"}
 
     @app.get("/monitor", response_class=HTMLResponse, include_in_schema=False)
     def dashboard():
