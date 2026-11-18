@@ -46,7 +46,10 @@ def test_ac013_monitor_shell_contains_no_data_or_remote_assets(monitor_page):
     assert not markup.asset_urls
     assert markup.by_id["token"]["type"] == "password"
     assert "value" not in markup.by_id["token"]
-    assert all("hidden" in markup.by_id[panel] for panel in ("report", "views", "explorer", "run-detail"))
+    assert all("hidden" in markup.by_id[panel] for panel in ("actions", "report", "views", "explorer", "run-detail"))
+    assert "hidden" not in markup.by_id["connect-panel"]
+    assert markup.by_id["overview-view"]["aria-controls"] == "report"
+    assert markup.by_id["runs-view"]["aria-controls"] == "explorer"
     assert {"metrics", "registered", "capabilities", "tasks", "timeline"} <= markup.by_id.keys()
     assert {"agent-version", "instances", "run-id", "run-facts", "trace", "events-next", "events-prev"} <= markup.by_id.keys()
 
@@ -65,6 +68,7 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             "version_id": "pinned", "capabilities": [capability, dict(capability, name="unused")]},
         "summary": {"tasks": 1, "queued": 0, "running": 0, "succeeded": 0, "failed": 1,
                     "cancelled": 0, "timed_out": 0, "tasks_with_spans": 1, "dispatches": 1,
+                    "skill_calls": "17", "tool_calls": "34",
                     "usage_receipts": 0, "pending_receipts": 1, "input_tokens": "0", "output_tokens": "0",
                     "settled_micros": "0", "reserved_micros": "9007199254740993"},
         "capabilities": [dict(capability, calls=1, succeeded=0, failed=1, unfinished=0,
@@ -114,8 +118,14 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             page.get_by_label("访问令牌", exact=True).fill(token)
             page.get_by_role("button", name="载入项目").click()
             page.locator("#report").wait_for()
+            assert page.get_by_role("heading", level=1, name="项目概览").is_visible()
+            assert page.locator("#connection-state").inner_text() == "已连接"
+            assert page.locator("#connect-panel").is_hidden()
             assert "当前主体可见任务" in page.locator("#scope").inner_text()
             assert "¥9007199254.740993" in page.locator("#metrics").inner_text()
+            metrics = page.locator("#metrics > div")
+            assert metrics.filter(has_text="Skill 调用总数").locator("dd").inner_text() == "17"
+            assert metrics.filter(has_text="Tool 调用总数").locator("dd").inner_text() == "34"
             assert "unused" in page.locator("#registered").inner_text()
             assert "unused" not in page.locator("#capabilities").inner_text()
             assert not page.locator("#report em").count()
@@ -131,6 +141,8 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
             assert page.locator("#report").is_hidden()
             assert page.locator("#tasks").inner_text() == page.locator("#timeline").inner_text() == ""
             assert page.get_by_role("button", name="载入项目").is_visible()
+            assert page.locator("#connected-project").inner_text() == ""
+            assert page.locator("#connection-state").inner_text() == "未连接"
             assert [path for path, _, _ in seen] == [summary_path, timeline_path, summary_path]
             assert all(header == "Bearer " + token and token not in query for _, header, query in seen)
             assert not unexpected
@@ -235,6 +247,8 @@ def test_ac013_browser_agent_paging_attempts_history_scope_and_revocation(monito
             page.get_by_role("button", name="载入项目").click()
             page.locator("#report").wait_for()
             page.get_by_role("button", name="Agent 运行轨迹").click()
+            assert page.get_by_role("heading", level=1, name="Agent 运行轨迹").is_visible()
+            assert page.locator("#runs-view").get_attribute("aria-pressed") == "true"
             page.get_by_role("button", name="下一页版本").click()
             page.get_by_text("这个时间范围内没有可见运行。").wait_for()
             page.get_by_role("button", name="上一页版本").click()

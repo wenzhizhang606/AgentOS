@@ -6,6 +6,8 @@ AgentOS 是以上下文管理为核心的企业 Agent 中台，底层权威数�
 
 单机容器部署使用 [Compose 配置](compose.yaml) 启动 MySQL、迁移、API 和独立 worker。监控页面和 API 共用端口，默认地址为 `http://127.0.0.1:8000/monitor`。[部署步骤、接口与探针](docs/changes/docker-deployment.md)
 
+公网监控可使用独立 HTTPS 网关，停用网关后仍可经 SSH 隧道访问。项目概览显示 Tool 和 Skill 调用总数，并支持按版本和单次运行追查。[HTTPS 监控入口](docs/changes/docker-deployment.md#公网-ip-监控入口) · [基准实测与主流 Agent 对照](docs/research/agent-benchmark-comparison.md) · [组件独立发布设计](docs/design/independent-component-release.md)
+
 首次配置时，将根目录的 `.env.example` 复制为 `.env`，填写模型部署名、完整的 Chat Completions API 地址和密钥，并按需调整词法检索参数。API 和 worker 使用相同的模型和检索配置生成发布 ID。[配置模板](.env.example) · [参数与生效方式](docs/changes/model-rag-environment.md)
 
 ## 已确认的代码结构

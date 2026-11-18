@@ -79,6 +79,7 @@ def test_ac013_023_observe_starts_failure_success_and_snapshot_links(deployment)
     context = next(r for r in report["capabilities"] if r["kind"] == "context")
     assert context["unfinished"] == 1 and context["avg_duration_ms"] >= 0
     assert report["summary"]["tasks_with_spans"] == 1
+    assert report["summary"]["tool_calls"] == 2 and report["summary"]["skill_calls"] == 0
 
 
 def test_ac012_metadata_scope_and_revocation(deployment):

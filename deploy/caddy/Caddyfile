@@ -1,0 +1,37 @@
+{
+	admin off
+	default_sni {$AGENTOS_PUBLIC_IP}
+	servers :443 {
+		protocols h1 h2
+	}
+}
+
+https://{$AGENTOS_PUBLIC_IP} {
+	tls {
+		issuer acme https://acme-v02.api.letsencrypt.org/directory {
+			profile shortlived
+		}
+	}
+
+	@home {
+		method GET HEAD
+		path /
+	}
+
+	@dashboard {
+		method GET HEAD
+		path /monitor
+	}
+
+	@observations {
+		method GET
+		path_regexp observers ^/v1/(projects/[^/]+/(monitoring|agents(/[^/]+/runs)?)|tasks/[^/]+/(timeline|runs/[1-9][0-9]*/trace))$
+	}
+	route {
+		redir @home /monitor 302
+		reverse_proxy @dashboard api:8000
+		header @observations Cache-Control "private, no-store"
+		reverse_proxy @observations api:8000
+		respond 404
+	}
+}

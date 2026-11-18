@@ -117,7 +117,9 @@ M1使用TASK-004已验收证据子集和TASK-015的身份/输入/发送/投递�
 
 ### TASK-010 独立评测
 
-M1 先接入 BEIR 的 SciFact 检索、HotpotQA 跨段问答和 SQuAD 2.0 拒答评测。依次冻结样本及评分器、建立基线、运行同条件候选并产出配对报告。问答模型固定为 `gpt-6.1-sol`。三个数据适配和首次全量跑分待完成。[划分及指标](../requirements/agentos-platform.md#m1-公开评测基准) · [AC-014](../specs/acceptance.md#ac-014-业务量化评测)
+M1 先接入 BEIR 的 SciFact 检索、HotpotQA 跨段问答和 SQuAD 2.0 拒答评测。依次冻结样本及评分器、建立基线、运行同条件候选并产出配对报告。问答模型固定为 `gpt-6.1-sol`。HotpotQA 和 SQuAD 2.0 的适配及首次全量跑分待完成。[划分及指标](../requirements/agentos-platform.md#m1-公开评测基准) · [AC-014](../specs/acceptance.md#ac-014-业务量化评测)
+
+SciFact 已完成词法与 BM25 的全量配对实验。HumanEval 固定六题和应用层多 Agent 四题配对作为试点基线。编码仓库级和原生多 Agent 评测依赖 TASK-018 及 TASK-007。TASK-008 按独立组件发布设计优先实现 Skill 与只读 Tool 的独立激活、版本锁定及回退。[实验结果与公开对照](../research/agent-benchmark-comparison.md) · [组件独立发布设计](../design/independent-component-release.md)
 
 先与业务专家建立任务分类和证据标签，再固定开发、验证及最终集的隔离方式。独立pilot用于估计任务簇方差与所需样本，冻结主要指标、功效、停止规则和可恢复故障类别；200×3只作规模参考。准备人工校准样本，落实失败分母、任务配对统计和费用最终结算。持续接入各模块，最终形成单 Agent、不同记忆和多 Agent 的统一报告。借鉴 P02、P09、P10，完整业务分布和策略敏感子集分别报告。
 

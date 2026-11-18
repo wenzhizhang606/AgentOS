@@ -1,0 +1,28 @@
+services:
+  monitor-gateway:
+    image: caddy:2.11.9-alpine
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    environment:
+      AGENTOS_PUBLIC_IP: ${AGENTOS_PUBLIC_IP:?Set the public monitor IP address}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - type: bind
+        source: ./deploy/caddy
+        target: /etc/caddy
+        read_only: true
+        bind:
+          create_host_path: false
+      - monitor-certificates:/data
+      - monitor-caddy-config:/config
+    networks: [application]
+
+volumes:
+  monitor-certificates:
+  monitor-caddy-config:

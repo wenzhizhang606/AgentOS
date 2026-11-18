@@ -8,6 +8,7 @@ from importlib.resources import files
 import json
 
 from agentos.gateways.tool.lexical import search
+from agentos.knowledge.bm25 import search as search_bm25
 
 
 @lru_cache
@@ -32,6 +33,7 @@ class EvidenceAdapter:
 
 EVIDENCE_TOOLS = {
     "lexical_search/1": EvidenceAdapter(search, ("gateways/tool/lexical.py", "knowledge/retrieval.py")),
+    "bm25_search/1": EvidenceAdapter(search_bm25, ("knowledge/bm25.py", "knowledge/retrieval.py")),
 }
 
 

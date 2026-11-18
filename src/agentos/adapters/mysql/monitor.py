@@ -117,6 +117,11 @@ def project_report(cur, tenant, project, subject, end, hours, limit):
             SELECT s.kind,s.name,s.version,s.digest,s.outcome,s.task_id,s.span_id,
                    TIMESTAMPDIFF(MICROSECOND,s.started_at,s.ended_at)/1000 AS duration_ms
             FROM cohort c JOIN ag_capability_span s ON s.task_id=c.task_id
+        ), span_totals AS (
+            SELECT COUNT(DISTINCT task_id) AS tasks_with_spans,
+                   COUNT(IF(kind='skill',1,NULL)) AS skill_calls,
+                   COUNT(IF(kind='tool',1,NULL)) AS tool_calls
+            FROM spans
         ), duration_ranks AS (
             SELECT kind,name,version,digest,duration_ms,
                    ROW_NUMBER() OVER (PARTITION BY kind,name,version,digest ORDER BY duration_ms,span_id) AS position_no,
@@ -142,7 +147,9 @@ def project_report(cur, tenant, project, subject, end, hours, limit):
             'failed',COUNT(IF(state='failed',1,NULL)),'cancelled',COUNT(IF(state='cancelled',1,NULL)),
             'timed_out',COUNT(IF(state='timed_out',1,NULL)),'dispatches',COUNT(dispatch_attempt_id),
             'pending_receipts',COUNT(dispatch_attempt_id)-COUNT(receipt_id),
-            'usage_receipts',COUNT(input_tokens),'tasks_with_spans',(SELECT COUNT(DISTINCT task_id) FROM spans),
+            'usage_receipts',COUNT(input_tokens),
+            'tasks_with_spans',(SELECT tasks_with_spans FROM span_totals),
+            'skill_calls',(SELECT skill_calls FROM span_totals),'tool_calls',(SELECT tool_calls FROM span_totals),
             'settled_micros',CAST(COALESCE(SUM(settled_micros),0) AS CHAR),
             'reserved_micros',CAST(COALESCE(SUM(reserved_micros),0) AS CHAR),
             'input_tokens',CAST(COALESCE(SUM(input_tokens),0) AS CHAR),

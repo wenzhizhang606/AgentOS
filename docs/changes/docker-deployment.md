@@ -89,4 +89,16 @@ $env:AGENTOS_TEST_COMPOSE="1"
 python -m pytest tests/integration/test_compose_deployment.py
 ```
 
-本轮没有执行镜像构建、数据库迁移或测试。该 Compose 面向单机联调。生产验收仍需生产凭证管理、入口 TLS、备份恢复演练、跨节点高可用及集中告警；业务监控页与容器健康检查各自覆盖不同范围。
+该 Compose 面向单机部署和验收。历史镜像、迁移及容器验收结果见实测记录。生产部署另行验收凭证管理、备份恢复、跨节点高可用和集中告警。[服务器验收记录](model-rag-environment.md#服务器验收)
+
+## 公网 IP 监控入口
+
+单机的可选网关由 Caddy 提供。上线需公网固定 IP，云安全组允许入站 TCP 80、443，并确保两端口由网关使用。80 用于证书验证和 HTTPS 重定向。Caddy 通过 Let's Encrypt 申请并自动续期短期 IP 证书，证书及 ACME 状态持久化在专用卷。API 的宿主机端口仍绑定回环地址，支持原有 SSH 隧道。[Compose 叠加配置](../../compose.monitor.yaml) · [公开路由](../../deploy/caddy/Caddyfile) · [Let's Encrypt IP 证书](https://letsencrypt.org/2026/01/15/6day-and-ip-general-availability)
+
+```bash
+export AGENTOS_PUBLIC_IP='<服务器公网 IPv4>'
+docker compose -f compose.yaml -f compose.monitor.yaml up -d monitor-gateway
+curl --fail "https://${AGENTOS_PUBLIC_IP}/monitor" --output /dev/null
+```
+
+网关在 HTTPS 上仅开放监控页面和现有只读监控接口。首页可访问，项目数据继续要求 AgentOS 令牌。在无凭证的浏览器或外部主机上检查监控页面返回 200，项目监控接口返回 401，`POST /v1/tasks` 返回 404。维护时在 Compose 命令中同时指定两份配置，避免把网关视作孤立容器。

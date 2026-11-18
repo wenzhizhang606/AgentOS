@@ -89,7 +89,7 @@ if ($result.state -eq 'succeeded') {
 | 签字范围 | 验收材料和判定 |
 | --- | --- |
 | M1 只读售后 | 记录日期、代码提交或镜像标识、API/worker 发布 ID、模型、测试库环境、JUnit 通过/失败/跳过数，以及上表逐项通过/失败/待核对。附真实运行的任务、尝试、快照、费用和回执证据。2026-11-18 的历史报告为 147 项工程测试通过，使用真实 MySQL、Chromium 和模型替身。每个新发布单独记录证据覆盖。[历史报告与环境](model-rag-environment.md#服务器验收) |
-| 公开质量评测（AC-014） | BEIR · SciFact test 验检索，以 nDCG@10 为主，模型调用数为零。HotpotQA distractor dev 验多段证据问答，记录 Answer F1、EM 和快照证据覆盖。SQuAD 2.0 dev 验回答与拒答，记录 EM、F1 和有答案题误拒率。两项生成评测固定 `gpt-6.1-sol`。按基准保留数据划分、评分器版本、逐题预测、全量分母和技术失败。当前需求登记为 `planned`。[评测基准与适配](../requirements/agentos-platform.md#m1-公开评测基准) |
+| 公开质量评测（AC-014） | BEIR · SciFact test 验检索，以 nDCG@10 为主，已完成全量对照。HotpotQA distractor dev 验多段证据问答，SQuAD 2.0 dev 验回答与拒答。两项生成评测固定 `gpt-6.1-sol`，适配与跑分待完成。按基准保留数据划分、评分器版本、逐题预测、全量分母和技术失败。[评测基准与适配](../requirements/agentos-platform.md#m1-公开评测基准) · [实测](../research/agent-benchmark-comparison.md) |
 | 业务试点 | 业务负责人先冻结隔离留出集、质量门槛、预算和环境。按相同问题配对比较基线与候选，提交成功率、最终证据覆盖率、引用正确率、端到端 P95、每成功任务成本、分母和 95% 置信区间。需求给出的最终证据覆盖率 ≥90%、引用正确率 ≥95% 是待冻结目标。越权、重复副作用及账本错误逐例验收。跨会话记忆、多 Agent、通用插件和沙箱按各自里程碑另验。[指标与试点条件](../requirements/agentos-platform.md) · [任务映射](../plan/implementation-plan.md) |
 
 签字记录可使用一行模板：`日期｜范围及版本｜负责人｜预期｜观察值及分母｜报告/任务/运行/快照 ID｜通过 / 失败 / 待核对｜遗留项`。
