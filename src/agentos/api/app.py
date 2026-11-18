@@ -170,8 +170,9 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
             return JSONResponse(status_code=503, content={"status": "not_ready"})
         return {"status": "ready"}
 
-    @app.get("/resources", response_class=HTMLResponse, include_in_schema=False)
-    @app.get("/monitor", response_class=HTMLResponse, include_in_schema=False)
+    @app.api_route("/console", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
+    @app.api_route("/resources", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
+    @app.api_route("/monitor", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False)
     def dashboard():
         page = files("agentos.observability").joinpath("dashboard.html").read_text(encoding="utf-8")
         return HTMLResponse(page, headers={

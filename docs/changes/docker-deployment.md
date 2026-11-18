@@ -1,15 +1,15 @@
 # 单机 Docker 部署与观测入口
 
-适用范围为当前 M1 与本地 Skill/Tool 的开发、联调环境。交付覆盖 TASK-001、TASK-009、TASK-013 和 AC-013、AC-017、AC-028 的部分部署行为。2026-11-18 在单机 Docker 上验证了部署端口、API 和 worker 的发布一致性、两个控制台和项目凭证。[审核记录](../design/review-log.md#2026-11-18--资源目录与调用瀑布图)
+适用范围为当前 M1 与本地 Skill/Tool 的开发、联调环境。部署覆盖 TASK-001、TASK-009、TASK-013 和 AC-013、AC-017、AC-028 的部分行为。[观测与资源目录审核记录](../design/review-log.md#2026-11-18--统一控制台入口)
 
 ## 观测入口
 
-基础 Compose 将 API 绑定到宿主机 `127.0.0.1:8000`。监控与资源管理共用这个入口，提供两个页面和六个只读数据 API。
+基础 Compose 将 API 绑定到宿主机 `127.0.0.1:8000`。项目概览、运行轨迹和资源管理位于同一个 `/console` 页面，共用一次登录。六个只读数据接口分别检查本次请求的权限。
 
 | 方法和路径 | 可以看到什么 |
 | --- | --- |
-| `GET /monitor` | 输入项目和凭证，查看项目汇总、任务时间线，或按 Agent 发布版本选择一次运行。 |
-| `GET /resources`、`GET /v1/projects/{project_id}/resources` | 查看当前发布启用的 Skill 与 Tool 数量、名称、版本和摘要。 |
+| `GET /console` | 打开项目概览。书签 `/console#runs` 直达 Agent 运行轨迹，`/console#resources` 直达资源管理。已有的 `/monitor`、`/resources` 书签分别进入项目概览和资源管理。 |
+| `GET /v1/projects/{project_id}/resources` | 查看当前发布启用的 Skill 与 Tool 数量、名称、版本和摘要。 |
 | `GET /v1/projects/{project_id}/monitoring` | 项目内的任务状态、能力清单与实际调用、P95 耗时、Token、已结算费用与待核对回执。 |
 | `GET /v1/tasks/{task_id}/timeline` | 一次任务中的排队和领取、上下文准备、Skill、Tool、模型准入和费用回执。 |
 | `GET /v1/projects/{project_id}/agents` | 在所选时间范围内，有可见运行的 Agent 发布版本。 |
@@ -72,7 +72,7 @@
    docker compose exec -T api agentos release-id
    ```
 
-   打开本机 `/monitor`，输入项目 `support` 和第二步生成的令牌。已有任务可直接查看；首次提交可使用 [M1 请求示例](m1-managed-support.md)，将其中的 `(agentos release-id)` 改为 `(docker compose exec -T api agentos release-id)`。查看特定服务日志可运行 `docker compose logs --tail=100 worker`。
+   打开 `http://127.0.0.1:8000/console`，输入项目 `support` 和第二步生成的令牌。已有运行可在“Agent 运行轨迹”查看。首次提交可使用 [M1 请求示例](m1-managed-support.md)，将其中的 `(agentos release-id)` 改为 `(docker compose exec -T api agentos release-id)`。查看特定服务日志可运行 `docker compose logs --tail=100 worker`。
 
 ## 持久化和升级
 
@@ -99,7 +99,7 @@ python -m pytest tests/integration/test_compose_deployment.py
 ```bash
 export AGENTOS_PUBLIC_IP='<服务器公网 IPv4>'
 docker compose -f compose.yaml -f compose.monitor.yaml up -d api monitor-gateway
-curl --fail "https://${AGENTOS_PUBLIC_IP}:8000/monitor" --output /dev/null
+curl --fail "https://${AGENTOS_PUBLIC_IP}:8000/console" --output /dev/null
 ```
 
-网关在 HTTPS 上仅开放监控页面和现有只读监控接口。首页可访问，项目数据继续要求 AgentOS 令牌。在无凭证的浏览器或外部主机上检查监控页面返回 200，项目监控接口返回 401，`POST /v1/tasks` 返回 404。维护时在 Compose 命令中同时指定两份配置，避免把网关视作孤立容器。
+从公网访问根路径 `/` 会进入 `/console`。检查未登录的控制台请求应返回 200，项目监控或目录数据请求应返回 401，业务写入 `POST /v1/tasks` 应返回 404。维护时在 Compose 命令中同时指定两份配置，避免把网关视作孤立容器。通过 SSH 隧道连接时，浏览器入口为 `http://127.0.0.1:18000/console`。[Windows 开启隧道的命令](m1-acceptance-walkthrough.md#在-windows-上打开服务器监控)

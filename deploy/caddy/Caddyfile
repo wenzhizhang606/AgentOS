@@ -21,7 +21,7 @@ https://{$AGENTOS_PUBLIC_IP}:8000, https://{$AGENTOS_PUBLIC_IP} {
 
 	@dashboard {
 		method GET HEAD
-		path /monitor /resources
+		path /console /monitor /resources
 	}
 
 	@observations {
@@ -29,7 +29,7 @@ https://{$AGENTOS_PUBLIC_IP}:8000, https://{$AGENTOS_PUBLIC_IP} {
 		path_regexp observers ^/v1/(projects/[^/]+/(monitoring|resources|agents(/[^/]+/runs)?)|tasks/[^/]+/(timeline|runs/[1-9][0-9]*/trace))$
 	}
 	route {
-		redir @home /monitor 302
+		redir @home /console 302
 		reverse_proxy @dashboard api:8000
 		header @observations Cache-Control "private, no-store"
 		reverse_proxy @observations api:8000

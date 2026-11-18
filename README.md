@@ -1,32 +1,34 @@
 # AgentOS
 
-AgentOS 是以上下文管理为核心的企业 Agent 中台，底层权威数据库采用 MySQL。首个只读售后任务包含 API、worker 和模型网关。2026-11-18 的单机部署验收使用真实 MySQL、Chromium 和模型替身，147 个测试用例全部通过。[启动与调用](docs/changes/m1-managed-support.md) · [验收环境及结果](docs/changes/model-rag-environment.md#服务器验收)
-
-验收当前发布时，可以先在监控页面复查一笔已有运行，再用退货政策验证回答、引用、预算和权限。操作手册提供可复制的命令、逐项通过条件以及业务试点的签字口径。[M1 验收操作手册](docs/changes/m1-acceptance-walkthrough.md)
+AgentOS 是以上下文管理为核心的企业 Agent 中台。API 受理任务，worker 组装上下文并通过模型网关调用模型，MySQL 保存任务、调用及结算记录。2026-11-18 的工程回归已有 135 项契约测试、27 项真实 MySQL 用例和 6 项部署用例通过。业务验收可沿一次真实运行核对回答、引用和费用。[启动与调用](docs/changes/m1-managed-support.md) · [M1 验收操作手册](docs/changes/m1-acceptance-walkthrough.md)
 
 首次配置时，将根目录的 `.env.example` 复制为 `.env`，填写模型部署名、完整的 Chat Completions API 地址和密钥，并按需调整词法检索参数。API 和 worker 使用相同的模型和检索配置生成发布 ID。[配置模板](.env.example) · [参数与生效方式](docs/changes/model-rag-environment.md)
 
-## 打开监控和资源管理控制台
+## 打开 AgentOS 控制台
 
-| 部署方式 | 监控地址 | 端口用途 |
+| 部署方式 | 控制台地址 | 端口用途 |
 | --- | --- | --- |
-| 基础 Compose | `http://127.0.0.1:8000/monitor` | API 默认只监听宿主机回环地址 |
-| 叠加公网网关 | `https://<公网 IPv4>:8000/monitor` | TCP 8000 提供监控，TCP 443 支持证书续期和兼容访问，TCP 80 留给其他服务 |
-| 公网部署上的 SSH 隧道 | `http://127.0.0.1:18000/monitor` | 本机 18000 转发到服务器 `127.0.0.1:18080` 的私有 API |
+| 基础 Compose | `http://127.0.0.1:8000/console` | API 默认只监听宿主机回环地址 |
+| 叠加公网网关 | `https://<公网 IPv4>:8000/console` | 8000 提供 HTTPS，443 用于证书验证和兼容访问，80 留给其他服务 |
+| 公网部署上的 SSH 隧道 | `http://127.0.0.1:18000/console` | 本机 18000 转发到服务器 `127.0.0.1:18080` 的私有 API |
 
-1. 使用管理员提供的项目 ID 和监控访问令牌登录。专用观察令牌记录在部署配置的 `monitor_credentials` 中，只能读取授权范围内的运行元数据。浏览器将令牌保存在当前页面内存中。
-2. **项目概览**展示所选时间内的任务状态分布、Skill 加载、Tool 执行、模型准入次数及已结算费用。时间窗口按任务创建时间筛选，次数统计覆盖窗口内的全部可见任务。
-3. **Agent 运行轨迹**支持按发布版本选择实例，也可直接输入 `任务 ID:尝试号`。瀑布图按同一时间轴显示上下文、Skill、Tool 和模型事件。模型区间从发送准入到费用结算，底部事件表保留精确时间、错误和关联标识。
+输入管理员提供的项目 ID 和访问令牌后，可在同一页面切换以下三个标签。令牌只保存在本页内存中。直接打开带标签的书签会先显示登录表单，登录后进入目标视图。
+
+- **项目概览**（`/console`）显示所选时间内的任务状态分布、Skill 加载、Tool 执行、模型准入和已结算费用。窗口按任务创建时间筛选，调用汇总覆盖窗口内的全部可见任务。
+- **Agent 运行轨迹**（`/console#runs`）可按发布版本选择实例，也可输入 `任务 ID:尝试号`。瀑布图把上下文、Skill、Tool 和模型放在同一时间轴上。模型区间从发送准入到费用结算，事件明细列出精确时间、错误和关联标识。
+- **资源管理**（`/console#resources`）列出当前发布启用的 Skill 数、Tool 数，以及每项资源的名称、版本和 SHA-256。已启用但从未调用的资源也计入目录。程序可使用同一项目观察凭证读取 `GET /v1/projects/{project_id}/resources`。
 
 公网部署需在云安全组放行入站 TCP 8000 和 443。[启动网关与探针](docs/changes/docker-deployment.md#公网-ip-监控入口) · [监控凭证和调用口径](docs/changes/capability-monitoring.md) · [实例查看示例](docs/changes/agent-run-trace.md)
 
-在同一地址打开 `/resources`，或登录后点击顶部「资源管理」，即可看到当前发布启用的 **Skill 数、Tool 数**及每项资源的名称、版本和 SHA-256。目录包含从未调用的资源，按类型筛选只改变列表。需要读取机器可用的清单时，使用同一项目观察令牌访问 `GET /v1/projects/{project_id}/resources`。资源目录随部署的活动发布更新。[资源目录接口](docs/changes/capability-monitoring.md#查看监控)
+已有的 `/monitor` 和 `/resources` 书签仍可使用，分别进入控制台的项目概览和资源管理。专用观察令牌在 `monitor_credentials` 中配置，可读范围由观察授权和当前项目成员关系共同决定。[资源目录与授权](docs/changes/capability-monitoring.md#查看监控)
 
 检索、编码和多 Agent 的已测结果分别列出样本数、评分方式和可比的公开基线。[基准实测与主流 Agent 对照](docs/research/agent-benchmark-comparison.md) · [组件独立发布设计](docs/design/independent-component-release.md)
 
+仓库级编码试点采用 SWE-Bench Pro V2 Full 的 1 道 Open Library 题。`gpt-6.1-sol` 一次生成补丁，官方 5 项缺陷测试和 15 项回归测试全部通过。样本规模为 1 题，全榜规模为 642 题。[近期模型报告、运行记录及官方评分](docs/research/swe-model-report-pilot.md)
+
 ## 已确认的代码结构
 
-当前支持在同一发布中配置文本 Skill 和内置只读 Tool。在 `/monitor` 输入项目和凭证后，可以查看项目汇总，也可以选择 Agent 发布版本，再按任务 ID 和尝试号查看一次运行的轨迹。同一任务被 worker 重新领取时产生新尝试。[Agent 运行轨迹与升级说明](docs/changes/agent-run-trace.md) · [Skill、Tool 与项目监控](docs/changes/capability-monitoring.md)
+当前支持在同一发布中配置文本 Skill 和内置只读 Tool。同一任务被 worker 重新领取时产生新尝试，可在控制台按任务 ID 和尝试号区分。[Agent 运行轨迹与升级说明](docs/changes/agent-run-trace.md) · [Skill、Tool 与项目监控](docs/changes/capability-monitoring.md)
 
 | 路径 | 职责 |
 | --- | --- |

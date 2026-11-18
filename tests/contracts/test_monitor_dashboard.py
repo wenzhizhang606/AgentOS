@@ -41,7 +41,7 @@ class DashboardMarkup(HTMLParser):
 def monitor_page():
     store = Mock(spec=TaskStore)
     with TestClient(create_app(store, Authenticator({}), "pinned")) as client:
-        response = client.get("/monitor")
+        response = client.get("/console")
     assert not store.mock_calls
     return response
 
@@ -53,7 +53,7 @@ def test_ac013_monitor_shell_contains_no_data_or_remote_assets(monitor_page):
     assert monitor_page.headers["referrer-policy"] == "no-referrer"
     markup = DashboardMarkup()
     markup.feed(monitor_page.text)
-    assert markup.asset_urls == ["/resources"]
+    assert not markup.asset_urls
     assert markup.by_id["token"]["type"] == "password"
     assert "value" not in markup.by_id["token"]
     assert all("hidden" in markup.by_id[panel] for panel in ("actions", "report", "views", "explorer", "run-detail"))
@@ -101,7 +101,7 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
         if url.netloc != "monitor.invalid" or request.method != "GET":
             unexpected.append(request.url)
             route.abort()
-        elif url.path == "/monitor":
+        elif url.path == "/console":
             route.fulfill(status=200, content_type="text/html; charset=utf-8", body=monitor_page.content,
                           headers={"Content-Security-Policy": monitor_page.headers["content-security-policy"]})
         elif url.path in {summary_path, timeline_path}:
@@ -121,7 +121,7 @@ def test_ac013_browser_drilldown_revocation_and_credential_lifetime(monitor_page
         page = browser.new_page(viewport={"width": 320, "height": 760})
         try:
             page.route("**/*", serve)
-            page.goto(origin + "/monitor")
+            page.goto(origin + "/console")
             assert not seen and not unexpected
             fits_viewport = "document.documentElement.scrollWidth <= document.documentElement.clientWidth"
             assert page.evaluate(fits_viewport)
@@ -288,6 +288,7 @@ def test_ac013_browser_agent_paging_attempts_history_scope_and_revocation(monito
             page.get_by_role("button", name="载入项目").click()
             page.locator("#report").wait_for()
             page.get_by_role("button", name="Agent 运行轨迹").click()
+            assert page.url == "http://monitor.invalid/console#runs"
             assert page.get_by_role("heading", level=1, name="Agent 运行轨迹").is_visible()
             assert page.locator("#runs-view").get_attribute("aria-pressed") == "true"
             page.get_by_role("button", name="下一页版本").click()
@@ -434,7 +435,7 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
         if url.netloc != "monitor.invalid" or request.method != "GET" or token in request.url:
             unexpected.append(request.url)
             route.abort()
-        elif url.path in ("/resources", "/monitor"):
+        elif url.path in ("/resources", "/monitor", "/console"):
             pages.append(url.path)
             route.fulfill(content_type="text/html; charset=utf-8", body=monitor_page.content,
                           headers={"Content-Security-Policy": monitor_page.headers["content-security-policy"]})
@@ -456,7 +457,8 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
         try:
             page.route("**/*", serve)
             page.goto(origin + "/resources")
-            assert page.get_by_role("link", name="打开运行监控").get_attribute("href") == "/monitor"
+            assert page.url == origin + "/console#resources"
+            assert page.title() == "AgentOS 控制台"
             assert not requests
             skill_count, tool_count = page.locator("#skill-inventory"), page.locator("#tool-inventory")
             table = page.locator("#catalog-table")
@@ -482,11 +484,11 @@ def test_ac013_ac023_browser_project_resource_directory(monitor_page):
 
             page.locator("#overview-view").click()
             page.locator("#report").wait_for()
-            assert page.url == origin + "/monitor"
+            assert page.url == origin + "/console"
             assert table.text_content() == "" and not page.locator("#resources").is_visible()
             page.locator("#resources-view").click()
             table.get_by_text("unused-guidance").wait_for()
-            assert page.url == origin + "/resources" and table.locator(".resource-name").count() == 3
+            assert page.url == origin + "/console#resources" and table.locator(".resource-name").count() == 3
             page.go_back()
             page.locator("#report").wait_for()
             page.go_forward()

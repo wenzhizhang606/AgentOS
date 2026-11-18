@@ -111,3 +111,9 @@ SciFact 配对验证 BM25 候选，保留旧证据适配器。协作判分从同
 ## 2026-11-18 · 资源目录与调用瀑布图
 
 AC-013 与 AC-023 分别核对统计的来源。资源目录读取当前不可变发布清单，运行监控按实际任务、跨度和模型准入计数。用真实项目与空目录夹具分别验证了完整清单和零值。观察凭证经过有效期、项目范围、实时成员和操作类型校验。公网 8000 提供 HTTPS，测试核实宿主机没有 80 端口监听。浏览器用例涵盖窄屏、切换项目视图、分页、身份撤销和迟到响应。设计参考了阿里云对总览与单次追踪的分层、AWS 的分段时间轴及 Google Cloud 的按 ID 定位。[阿里云可观测链路](https://help.aliyun.com/zh/opentelemetry/quick-start) · [AWS X-Ray](https://docs.aws.amazon.com/xray/latest/devguide/xray-console-traces.html) · [Google Cloud Trace](https://docs.cloud.google.com/trace/docs/finding-traces)
+
+## 2026-11-18 · 统一控制台入口
+
+REQ-OBS-001、TASK-009 和 AC-013 将项目概览、单次运行和当前发布资源目录放在同一控制台。主入口为 `/console`，书签 `#runs`、`#resources` 记录目标视图。登录表单在页面内存中保存项目和令牌。直接访问旧书签后仍可进入对应视图。切换标签时复用当前登录，各数据接口分别校验身份与项目范围，登出或撤权清除已读数据。[运行契约](../specs/runtime-contracts.md) · [验收案例](../specs/acceptance.md)
+
+视觉采用白色内容区、浅灰背景和红色操作与选中态。配色参考华为视觉规范对红色强调面积的控制，导航参考华为云在同一管理控制台提供资源入口的方式。AgentOS 的指标保留状态文字和数值，颜色只辅助识别。[华为 ICT 学院视觉识别规范](https://e.huawei.com/marketingcloud/pep/asset/20000001/Material/37b18964a35f408c8118a4eccc54e8a1/M3T1A669N1068569492865695897/%E5%8D%8E%E4%B8%BAICT%E5%AD%A6%E9%99%A2-%E8%A7%86%E8%A7%89%E8%AF%86%E5%88%AB%E8%A7%84%E8%8C%83%E6%89%8B%E5%86%8C20241105.pdf) · [华为云控制台公共导航](https://support.huaweicloud.com/qs-consolehome/consolehome_qs_0003.html)

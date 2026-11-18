@@ -132,9 +132,14 @@ def test_ac_012_013_resource_endpoints_keep_catalog_private(client_store):
     client, store = client_store
     page = client.get("/resources")
     monitor = client.get("/monitor")
-    assert page.status_code == 200 and page.content == monitor.content and not store.mock_calls
+    console = client.get("/console")
+    assert page.status_code == monitor.status_code == console.status_code == 200
+    assert page.content == monitor.content == console.content and not store.mock_calls
+    for route in ("/console", "/resources", "/monitor"):
+        probe = client.head(route)
+        assert probe.status_code == 200 and probe.content == b""
     for header in ("content-security-policy", "referrer-policy", "cache-control"):
-        assert page.headers[header] == monitor.headers[header]
+        assert page.headers[header] == monitor.headers[header] == console.headers[header]
     path = "/v1/projects/support/resources"
     assert client.get(path).status_code == 401
     assert client.get("/v1/projects/other/resources", headers=HEADERS).status_code == 403

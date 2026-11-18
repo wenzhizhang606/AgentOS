@@ -1,6 +1,6 @@
 # Skill、Tool 与项目监控
 
-本次开发对应 REQ-TOOL-002、REQ-OBS-001，覆盖 TASK-017、TASK-009 和 AC-023、AC-013 的部分行为。状态为已编写代码及测试，待统一验证。
+对应 REQ-TOOL-002、REQ-OBS-001，覆盖 TASK-017、TASK-009 和 AC-023、AC-013 的部分行为。
 
 ## 技术文档与实现对照
 
@@ -28,11 +28,11 @@
 
 ## 查看监控
 
-启动 API 后打开 `/monitor`，输入项目 ID 和 Bearer 凭证，载入后可按任务查看时间线，也可按 Agent 发布版本查看[一次运行的轨迹](agent-run-trace.md)。监控页面从同源 API 读取数据。凭证保留在页面内存，服务端按凭证授予范围和 MySQL 当前项目成员关系处理每次查询。
+打开 `/console`，使用项目 ID 和 Bearer 凭证登录。项目概览按任务展示实际调用。“Agent 运行轨迹”（`/console#runs`）可查看一次执行尝试，“资源管理”（`/console#resources`）可核对活动发布的完整目录。切换标签复用页面内存中的凭证，各数据请求均由服务端核验访问范围和 MySQL 当前项目成员关系。旧书签 `/monitor` 和 `/resources` 会进入对应视图。[实例轨迹](agent-run-trace.md)
 
 | 入口 | 数据与范围 |
 | --- | --- |
-| `GET /v1/projects/{project_id}/resources` | 资源管理页 `/resources` 的数据源。校验凭证和实时成员关系后，返回当前活动发布的 `agent_version_id`、`counts.skill`、`counts.tool`，以及每项的类型、名称、版本和摘要。数量与时间窗口和运行次数无关。 |
+| `GET /v1/projects/{project_id}/resources` | 资源管理标签的数据源。校验凭证和当前项目成员关系后返回活动发布的 `agent_version_id`、`counts.skill`、`counts.tool` 及每项资源的类型、名称、版本和摘要。目录数量独立于时间窗口和调用次数。 |
 | `GET /v1/projects/{project_id}/monitoring?hours=24&limit=50` | 按任务创建时间选取 1～168 小时的样本，最近任务列表 1～200 条。汇总任务状态、模型准入、待核对、已结算/预留费用和已知 Token 用量，以及按能力版本汇总的执行状态和耗时。活动发布的能力清单独立列出。 |
 | `GET /v1/tasks/{task_id}/timeline` | 读取任务事件、上下文准备、Skill 加载、Tool 执行和模型准入/回执的元数据。子能力关联对应的上下文准备，快照可关联最终被准入的模型输入。 |
 | `GET /v1/context-snapshots/{snapshot_id}` | 任务所有者按当前授权、来源状态和留存策略检查快照。项目监控凭证本身不会授予读取他人回答、输入或快照正文的权限。 |
@@ -48,4 +48,4 @@
 - 账本使用人民币微元，100 万微元等于 1 元。Token 只汇总有计量回执的部分。项目聚合以任务或发送记录单独统计费用；一个任务中的多次能力调用不重复累计同一笔模型费用。能力耗时是本地执行跨度，存在父子嵌套，不能将各行时长相加为端到端耗时。
 - 同一能力版本的 P95 取已结束调用耗时升序的第 `ceil(0.95 × N)` 个样本，包含失败调用。未结束的调用单列。每次项目查询最多列出 200 组能力，每个任务最多返回最近 500 条时间线事件；响应会标记截断。
 
-统一测试阶段可执行 `python -m pytest tests/contracts`。可选浏览器用例依赖 Playwright 和 Chromium，预先安装可用 `python -m pip install playwright`、`python -m playwright install chromium`。对已应用 001 至 003 的专用 MySQL 测试库设置 `AGENTOS_TEST_MYSQL=1`，再执行 `python -m pytest tests/integration tests/acceptance`。本次开发未执行这些测试或数据库迁移。
+统一测试阶段可执行 `python -m pytest tests/contracts`。浏览器用例依赖 Playwright 和 Chromium，可用 `python -m pip install playwright`、`python -m playwright install chromium` 安装。对已应用 001 至 003 的专用 MySQL 测试库设置 `AGENTOS_TEST_MYSQL=1`，再执行 `python -m pytest tests/integration tests/acceptance`。

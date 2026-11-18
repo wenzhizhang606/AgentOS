@@ -233,7 +233,7 @@ MySQL 的原子 DDL 不等于事务式 DDL。Schema 变更、数据回填和发�
 
 ## HTTP 入口与错误处理
 
-M1 的 `GET /resources` 和 `GET /monitor` 提供公开登录页面。读取资源目录使用 `GET /v1/projects/{project_id}/resources`，每次检查 Bearer 身份、项目范围和当前 MySQL 成员关系。响应包含 `project_id`、`agent_version_id`、`counts` 和 `resources`。其中 `counts.skill` 与 `counts.tool` 分别等于活动发布里相应类型的资源条目数，空目录返回两个零。每个条目只包含 `kind`、`name`、`version`、`digest`。凭证专用集合 `monitor_credentials` 可读取资源目录与监控元数据，访问任务写入或正文接口返回 403。[配置与统计范围](../changes/capability-monitoring.md)
+M1 统一控制台位于 `GET /console`，默认进入项目概览。浏览器片段 `#resources`、`#runs` 分别直达资源管理和 Agent 运行轨迹。旧路径 `/monitor`、`/resources` 兼容已有书签。数据请求各自携带页面内存中的 Bearer 凭证并进行身份核验。资源目录使用 `GET /v1/projects/{project_id}/resources`，每次检查项目范围和当前 MySQL 成员关系。响应包含 `project_id`、`agent_version_id`、`counts` 和 `resources`。`counts.skill` 与 `counts.tool` 分别统计活动发布中相应类型的资源，空目录返回两个零。每个条目只包含 `kind`、`name`、`version`、`digest`。专用凭证集合 `monitor_credentials` 可读取目录与监控元数据，用它请求任务写入或正文会返回 403。[配置与统计范围](../changes/capability-monitoring.md)
 
 | 入口 | 用途 | 主要语义 |
 | --- | --- | --- |
