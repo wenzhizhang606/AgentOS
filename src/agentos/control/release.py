@@ -21,7 +21,7 @@ def _components():
         "gateways/model/client.py", "adapters/mysql/store.py", "contracts/errors.py",
         "control/capabilities.py", "gateways/tool/registry.py", "gateways/tool/evidence.py",
         "observability/capabilities.py",
-        "adapters/mysql/monitor.py",
+        "adapters/mysql/monitor.py", "adapters/mysql/run_trace.py",
     )
     return tuple((name, hashlib.sha256(root.joinpath(*name.split("/")).read_text(
         encoding="utf-8").encode("utf-8")).hexdigest()) for name in paths)

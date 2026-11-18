@@ -16,7 +16,7 @@
 
 ## 在现有发布中接入
 
-1. 在已应用 [001 基础迁移](../../migrations/mysql/001_managed_task.sql) 的数据库中执行 [002 增量迁移](../../migrations/mysql/002_capability_monitoring.sql)，再启动新版 API 和 worker。沿用 [M1 部署说明](m1-managed-support.md) 中的数据库变量、凭证文件、模型密钥和项目授权。升级会生成新的发布 ID，保留已有任务对应的旧版 worker，直到它们处理完毕。
+1. 在已应用 [001 基础迁移](../../migrations/mysql/001_managed_task.sql) 的数据库中依次补齐 [002 能力监控](../../migrations/mysql/002_capability_monitoring.sql) 和 [003 运行轨迹](../../migrations/mysql/003_run_trace.sql)，再启动新版 API 和 worker。沿用 [M1 部署说明](m1-managed-support.md) 中的数据库变量、凭证文件、模型密钥和项目授权。升级会生成新的发布 ID，保留已有任务对应的旧版 worker，直到它们处理完毕。
 2. 复制[含 Skill 和 Tool 的完整发布示例](../../examples/m1/release-capabilities.json)，填入实际 HTTPS 模型端点、模型标识、窗口和价格。将两个进程的 `AGENTOS_RELEASE_FILE` 指向这份文件。运行 `agentos capabilities` 检查部署清单元数据，用 `agentos release-id` 获取提交任务所需的发布版本。
 3. 新 Skill 用 `kind=skill` 声明名称、版本、负责人、来源、许可证和文本，通过 `requires` 精确绑定依赖工具的名称与版本。该文本以带来源的用户消息数据进入上下文，和模型窗口预算一起检查。一个已发布名称和版本固定其摘要，修改文本或依赖须发布新版本。
 4. 示例 Tool 用 `kind=tool`、`implementation=lexical_search/1` 选择已有的本地适配器，`limit` 约束返回数量。worker 先从 MySQL 取得当前主体有权读取的文档，再把候选资料交给工具；工具只对内存中的候选做检索。默认发布继续使用原有的内置检索。任何新的工具实现都需要增加适配器和契约测试；在 JSON 中填写 URL、shell 命令或 Python 导入路径无法创建可执行工具。
@@ -28,7 +28,7 @@
 
 ## 查看监控
 
-启动 API 后打开 `/monitor`，输入项目 ID 和 Bearer 凭证，载入后可按任务下钻。监控页面从同源 API 读取数据。凭证保留在页面内存，服务端按凭证授予范围和 MySQL 当前项目成员关系处理每次查询。
+启动 API 后打开 `/monitor`，输入项目 ID 和 Bearer 凭证，载入后可按任务查看时间线，也可按 Agent 发布版本查看[一次运行的轨迹](agent-run-trace.md)。监控页面从同源 API 读取数据。凭证保留在页面内存，服务端按凭证授予范围和 MySQL 当前项目成员关系处理每次查询。
 
 | 入口 | 数据与范围 |
 | --- | --- |
@@ -45,4 +45,4 @@
 - 账本使用人民币微元，100 万微元等于 1 元。Token 只汇总有计量回执的部分。项目聚合以任务或发送记录单独统计费用；一个任务中的多次能力调用不重复累计同一笔模型费用。能力耗时是本地执行跨度，存在父子嵌套，不能将各行时长相加为端到端耗时。
 - 同一能力版本的 P95 取已结束调用耗时升序的第 `ceil(0.95 × N)` 个样本，包含失败调用。未结束的调用单列。每次项目查询最多列出 200 组能力，每个任务最多返回最近 500 条时间线事件；响应会标记截断。
 
-统一测试阶段可执行 `python -m pytest tests/contracts`。可选浏览器用例依赖 Playwright 和 Chromium，预先安装可用 `python -m pip install playwright`、`python -m playwright install chromium`。对已应用 001 和 002 的专用 MySQL 测试库设置 `AGENTOS_TEST_MYSQL=1`，再执行 `python -m pytest tests/integration tests/acceptance`。本次开发未执行这些测试或数据库迁移。
+统一测试阶段可执行 `python -m pytest tests/contracts`。可选浏览器用例依赖 Playwright 和 Chromium，预先安装可用 `python -m pip install playwright`、`python -m playwright install chromium`。对已应用 001 至 003 的专用 MySQL 测试库设置 `AGENTOS_TEST_MYSQL=1`，再执行 `python -m pytest tests/integration tests/acceptance`。本次开发未执行这些测试或数据库迁移。

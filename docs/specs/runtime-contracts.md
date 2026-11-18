@@ -235,6 +235,9 @@ MySQL 的原子 DDL 不等于事务式 DDL。Schema 变更、数据回填和发�
 | --- | --- | --- |
 | `POST /v1/tasks` | 创建根任务 | 必填 Idempotency-Key，服务端生成身份与预算账户，返回202及任务引用 |
 | `GET /v1/tasks/{task_id}` | 读取任务状态 | 返回执行状态、版本、结果引用、费用结算和待核对副作用 |
+| `GET /v1/projects/{project_id}/agents` | 选择 Agent 发布版本 | 按项目、可见主体及领取时间窗口列出实际运行过的版本 |
+| `GET /v1/projects/{project_id}/agents/{agent_version_id}/runs` | 选择运行实例 | 每个领取事件对应一个 `task_id:attempt`，同一任务可出现多次 |
+| `GET /v1/tasks/{task_id}/runs/{attempt}/trace` | 检查一次运行 | 正整数尝试号，限定该次尝试的事件及调用元数据。已知 ID 可查询保留期内的历史轨迹 |
 | `POST /v1/tasks/{task_id}/cancel` | 请求取消 | 幂等，按当前状态返回202或已存在终态 |
 | `POST /v1/tasks/{task_id}/delegations` | 委派子任务 | 服务端收窄身份和预算，在事务内创建委派与子任务 |
 | `GET /v1/context-snapshots/{snapshot_id}` | 检查实际输入 | 读取时鉴权，按内容保留和失效状态返回可见数据 |
@@ -242,6 +245,10 @@ MySQL 的原子 DDL 不等于事务式 DDL。Schema 变更、数据回填和发�
 | `POST /v1/memories/{memory_id}/retract` | 撤回整个记忆条目 | 同步提交覆盖全部历史修订的墓碑、停用头指针及派生失效事件，返回操作 ID |
 | `GET /v1/operations/{operation_id}` | 检查异步操作 | 返回当前状态及受控可见的失败或未完成目标 |
 | `GET /v1/evaluations/{evaluation_id}` | 读取评测 | 访问权与数据集权限绑定，返回版本、覆盖和验收结果 |
+
+M1 的运行目录与运行列表使用 `hours`（默认 24，范围 1～168）、`limit`（默认 50，范围 1～200）和可选的不透明 `cursor`。三项查询均校验当前租户、凭证项目及数据库中的项目成员资格。普通主体可查自己的运行，显式持有该项目观察权限的主体可查项目运行元数据。快照正文和任务结果仍由各自接口授权。[时间窗口与历史数据](../changes/agent-run-trace.md)
+
+单次运行轨迹按页返回事件，每页最多 500 条，页内按时间升序排列。首次请求省略 `before` 获取最近一页。响应中的 `next_before` 为不透明游标，将它作为下一次同一轨迹请求的 `before` 即可读取更早的一页，直到没有更早事件。
 
 | 错误码 | 调用方处理 |
 | --- | --- |

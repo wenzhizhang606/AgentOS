@@ -12,7 +12,7 @@ import pymysql
 from pymysql.cursors import DictCursor
 
 from agentos.contracts.errors import PlatformError
-from agentos.adapters.mysql import monitor
+from agentos.adapters.mysql import monitor, run_trace
 
 
 TERMINAL = {"cancelled", "failed", "succeeded", "timed_out"}
@@ -84,11 +84,11 @@ def _task(cur, task_id):
     return row
 
 
-def _event(cur, task_id, kind):
+def _event(cur, task_id, kind, *, claimed_by=None):
     cur.execute("""INSERT INTO ag_task_event
-                   (event_id,task_id,sequence_no,attempt,event_type,occurred_at)
-                   SELECT %s,task_id,version,attempt,%s,UTC_TIMESTAMP(6)
-                   FROM ag_task WHERE task_id=%s""", (uuid4().hex, kind, task_id))
+                   (event_id,task_id,sequence_no,attempt,event_type,occurred_at,worker_id)
+                   SELECT %s,task_id,version,attempt,%s,UTC_TIMESTAMP(6),%s
+                   FROM ag_task WHERE task_id=%s""", (uuid4().hex, kind, claimed_by, task_id))
 
 
 def _lease(cur, row, ticket):
@@ -178,6 +178,30 @@ def _owned(cur, tenant, subject, task_id, allowed_projects):
     return _task(cur, task_id)
 
 
+def _observable_task(cur, tenant, subject, task_id, allowed_projects, monitor_projects):
+    scope = _one(cur, "SELECT project_id,subject_id FROM ag_task WHERE tenant_id=%s AND task_id=%s",
+                 (tenant, task_id))
+    if (not scope or scope["project_id"] not in allowed_projects
+            or (scope["subject_id"] != subject and scope["project_id"] not in monitor_projects)):
+        raise _error("RESOURCE_NOT_FOUND")
+    try:
+        _policy(cur, tenant, scope["project_id"], subject)
+    except PlatformError:
+        raise _error("RESOURCE_NOT_FOUND") from None
+    row = _one(cur, """SELECT task_id,project_id,agent_version_id,attempt,state,error_code
+                       FROM ag_task WHERE task_id=%s FOR SHARE""", (task_id,))
+    if row is None:
+        raise _error("RESOURCE_NOT_FOUND")
+    return row
+
+
+def _monitor_window(project, allowed_projects, hours, limit):
+    if project not in allowed_projects:
+        raise _error("FORBIDDEN")
+    if type(hours) is not int or not 1 <= hours <= 168 or type(limit) is not int or not 1 <= limit <= 200:
+        raise _error("INVALID_ARGUMENT")
+
+
 def _terminal(cur, row, state, code):
     cur.execute("""UPDATE ag_task SET state=%s,error_code=%s,version=version+1,
                    worker_id=NULL,lease_until=NULL WHERE task_id=%s""", (state, code, row["task_id"]))
@@ -227,8 +251,9 @@ class MySQLStore:
             with pymysql.connect(**self._connection, autocommit=True, connect_timeout=2,
                                  read_timeout=2, write_timeout=2) as conn, conn.cursor() as cur:
                 # LIMIT 0 checks the migrated columns without reading tenant data.
-                cur.execute("""SELECT t.monitor_created_at,s.snapshot_id FROM ag_task t
-                               LEFT JOIN ag_capability_span s ON s.task_id=t.task_id LIMIT 0""")
+                cur.execute("""SELECT t.monitor_created_at,s.snapshot_id,e.worker_id FROM ag_task t
+                               LEFT JOIN ag_capability_span s ON s.task_id=t.task_id
+                               LEFT JOIN ag_task_event e ON e.task_id=t.task_id LIMIT 0""")
                 cur.execute("""SELECT 1 FROM ag_release WHERE version_id=%s
                                AND @@GLOBAL.read_only=0 AND @@GLOBAL.super_read_only=0""", (version_id,))
                 return cur.fetchone() is not None
@@ -438,27 +463,43 @@ class MySQLStore:
 
     def get_timeline(self, tenant_id, subject_id, task_id, *, allowed_projects, monitor_project_ids=()):
         def work(cur):
-            scope = _one(cur, "SELECT project_id FROM ag_task WHERE tenant_id=%s AND task_id=%s",
-                         (tenant_id, task_id))
-            if not scope or scope["project_id"] not in allowed_projects:
-                raise _error("RESOURCE_NOT_FOUND")
-            if scope["project_id"] in monitor_project_ids:
-                try:
-                    _policy(cur, tenant_id, scope["project_id"], subject_id)
-                except PlatformError:
-                    raise _error("RESOURCE_NOT_FOUND") from None
-                row = _task(cur, task_id)
-            else:
-                row = _owned(cur, tenant_id, subject_id, task_id, allowed_projects)
+            row = _observable_task(cur, tenant_id, subject_id, task_id, allowed_projects, monitor_project_ids)
             return monitor.timeline(cur, row)
+        return self._tx(work)
+
+    def get_run_trace(self, tenant_id, subject_id, task_id, attempt, *, allowed_projects, monitor_project_ids=(),
+                      before=None):
+        if type(attempt) is not int or not 1 <= attempt < 2**64:
+            raise _error("INVALID_ARGUMENT")
+
+        def work(cur):
+            row = _observable_task(cur, tenant_id, subject_id, task_id, allowed_projects, monitor_project_ids)
+            return run_trace.trace(cur, row, attempt, before)
+        return self._tx(work)
+
+    def list_observed_agents(self, tenant_id, subject_id, project_id, *, allowed_projects,
+                             include_all_subjects=False, hours=24, limit=50, cursor=None):
+        return self._browse_runs(tenant_id, subject_id, project_id, None, allowed_projects,
+                                 include_all_subjects, hours, limit, cursor)
+
+    def get_agent_runs(self, tenant_id, subject_id, project_id, agent_version_id, *, allowed_projects,
+                       include_all_subjects=False, hours=24, limit=50, cursor=None):
+        return self._browse_runs(tenant_id, subject_id, project_id, _id(agent_version_id), allowed_projects,
+                                 include_all_subjects, hours, limit, cursor)
+
+    def _browse_runs(self, tenant, subject, project, release, allowed_projects, include_all_subjects,
+                     hours, limit, cursor):
+        _monitor_window(project, allowed_projects, hours, limit)
+
+        def work(cur):
+            _policy(cur, tenant, project, subject)
+            return run_trace.browse(cur, tenant, project, None if include_all_subjects else subject,
+                                    _now(cur), hours, limit, cursor, release)
         return self._tx(work)
 
     def get_monitoring(self, tenant_id, subject_id, project_id, *, allowed_projects,
                        include_all_subjects=False, hours=24, limit=50):
-        if project_id not in allowed_projects:
-            raise _error("FORBIDDEN")
-        if type(hours) is not int or not 1 <= hours <= 168 or type(limit) is not int or not 1 <= limit <= 200:
-            raise _error("INVALID_ARGUMENT")
+        _monitor_window(project_id, allowed_projects, hours, limit)
 
         def work(cur):
             _policy(cur, tenant_id, project_id, subject_id)
@@ -515,7 +556,7 @@ class MySQLStore:
             cur.execute("""UPDATE ag_task SET state='running',version=version+1,attempt=attempt+1,
                            lease_epoch=lease_epoch+1,worker_id=%s,lease_until=%s,ready_at=%s WHERE task_id=%s""",
                         (worker_id, expiry, expiry, row["task_id"]))
-            _event(cur, row["task_id"], "claimed")
+            _event(cur, row["task_id"], "claimed", claimed_by=worker_id)
             return {"task_id": row["task_id"], "tenant_id": row["tenant_id"], "project_id": row["project_id"],
                     "subject_id": row["subject_id"], "worker_id": worker_id, "lease_epoch": row["lease_epoch"] + 1}
         ticket = self._tx(work)

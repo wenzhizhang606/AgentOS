@@ -55,6 +55,8 @@ def run_one(store, model, release: Release, worker_id: str, lease_seconds: int =
     if task is None:
         return False
     task_id = task["task_id"]
+    log.info("Claimed task run_id=%s:%d agent_version_id=%s worker_id=%s",
+             task_id, task["attempt"], task["agent_version_id"], worker_id)
     try:
         try:
             prepared, dispatch_id, expires = _prepare_and_admit(store, task, release)

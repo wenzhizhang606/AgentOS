@@ -43,6 +43,17 @@
     .meta { overflow-wrap:anywhere; color:var(--muted) }
     .details { min-width:150px; max-width:360px; white-space:normal; overflow-wrap:anywhere }
     .details small { display:block; color:var(--muted) }
+    nav { display:flex; gap:5px; margin-top:20px; border-bottom:1px solid var(--line) }
+    nav button { padding:8px 14px; border:0; border-bottom:3px solid transparent; border-radius:0; background:none }
+    nav button[aria-pressed=true] { color:var(--green); border-bottom-color:var(--green); font-weight:700 }
+    .picker { display:flex; align-items:end; flex-wrap:wrap; gap:12px; margin-top:14px }
+    .picker label { min-width:0; flex:1 }
+    .picker select { width:100% }
+    .paging { display:flex; flex-wrap:wrap; gap:6px }
+    .run-button { color:var(--green); white-space:nowrap }
+    #trace-id code { user-select:all; color:var(--ink) }
+    #trace td:first-child { border-left:3px solid var(--line) }
+    #trace tr.failed td:first-child { border-color:var(--warn) }
     @media(max-width:620px) { main { padding:20px 12px } section { padding:14px } form>label { width:100% } }
   </style>
 </head>
@@ -62,6 +73,10 @@
     <button type="button" id="disconnect">断开连接</button>
   </div>
   <p id="status" role="status" aria-live="polite"></p>
+  <nav aria-label="监控视图" id="views" hidden>
+    <button type="button" id="overview-view" aria-pressed="true" aria-controls="report">项目概览</button>
+    <button type="button" id="runs-view" aria-pressed="false" aria-controls="explorer">Agent 运行轨迹</button>
+  </nav>
   <div id="report" hidden>
     <section aria-labelledby="summary-heading">
       <h2 id="summary-heading">项目概览</h2>
@@ -99,15 +114,73 @@
       </div>
     </section>
   </div>
+  <div id="explorer" hidden>
+    <section aria-labelledby="agent-heading">
+      <h2 id="agent-heading">选择 Agent</h2>
+      <p id="agent-scope" class="note"></p>
+      <div class="picker">
+        <label>Agent 发布版本<select id="agent-version" disabled><option value="">选择发布版本</option></select></label>
+        <div class="paging" aria-label="发布版本分页">
+          <button type="button" id="agents-prev" disabled>上一页版本</button>
+          <button type="button" id="agents-next" disabled>下一页版本</button>
+        </div>
+      </div>
+      <p class="note" id="agent-note" role="status"></p>
+      <form id="find-run" class="picker" autocomplete="off">
+        <label>运行 ID<input id="run-id" required spellcheck="false" aria-describedby="run-id-hint" placeholder="任务 ID:尝试次数"></label>
+        <button type="submit">按 ID 查看轨迹</button>
+      </form>
+      <p id="run-id-hint" class="note">输入完整运行 ID 可查看时间范围以外的记录。</p>
+    </section>
+    <section id="run-list" aria-labelledby="runs-heading" hidden>
+      <h2 id="runs-heading">运行实例</h2>
+      <p class="meta" id="runs-release"></p>
+      <div class="scroll"><table>
+        <thead><tr><th>开始时间</th><th>任务 ID</th><th>执行尝试</th><th>状态</th><th>Worker</th></tr></thead>
+        <tbody id="instances"></tbody>
+      </table></div>
+      <div class="actions paging" aria-label="运行实例分页">
+        <button type="button" id="instances-prev" disabled>上一页实例</button>
+        <button type="button" id="instances-next" disabled>下一页实例</button>
+      </div>
+    </section>
+    <section id="run-detail" aria-labelledby="trace-heading" hidden>
+      <h2 id="trace-heading" tabindex="-1">本次运行轨迹</h2>
+      <p id="trace-id" class="meta"></p>
+      <dl id="run-facts"></dl>
+      <p id="trace-note" class="note" role="status"></p>
+      <div class="scroll"><table>
+        <thead><tr><th>发生时间</th><th>类型</th><th>事件</th><th>执行尝试</th><th>来源 / 调用标识</th><th>耗时</th><th>错误码</th></tr></thead>
+        <tbody id="trace"></tbody>
+      </table></div>
+      <div class="actions paging" aria-label="运行事件分页">
+        <button type="button" id="events-next" disabled>更早事件</button>
+        <button type="button" id="events-prev" disabled>较新事件</button>
+      </div>
+    </section>
+  </div>
 </main>
 <script>
 "use strict";
 (() => {
   const byId = id => document.getElementById(id);
-  const stateNames = {queued:"排队中", running:"运行中", succeeded:"成功", failed:"失败", cancelled:"已取消", timed_out:"已超时"};
-  const accounting = {pending:"待结算", final:"已结算"};
+  const stateNames = {queued:"排队中", running:"运行中", succeeded:"成功", failed:"失败", cancelled:"已取消", timed_out:"已超时", superseded:"已被后续尝试接替"};
+  const accounting = {pending:"待结算", final:"已结算", no_dispatch:"无模型准入"};
+  const eventNames = {queued:"进入队列", claimed:"领取任务", started:"开始", succeeded:"完成", failed:"失败",
+    timed_out:"超时", cancelled:"取消", dispatch_admitted:"模型发送准入", receipt_settled:"费用结算"};
+  const kinds = {task:"任务", context:"上下文", skill:"Skill", tool:"Tool", model:"模型"};
   let connection = null, selected = null, projectRead = null, taskRead = null, timer = null;
+  let view = "overview", agent = "", instance = null;
+  function pageState() { return {previous:[], cursor:null, next:null}; }
+  let agentPage = pageState(), runPage = pageState(), tracePage = pageState();
   const date = value => value ? new Date(value).toLocaleString("zh-CN", {hour12:false}) : "—";
+  const eventTime = value => value ? date(value) + (value.match(/\.\d+(?=Z$)/)?.[0] ?? "") : "—";
+  function elapsedMs(start, end) {
+    if (!start || !end) return null;
+    // Date.parse retains milliseconds. The DB also records the next three fractional digits.
+    const subMillis = value => Number((value.split(".")[1] || "").replace(/Z$/, "").padEnd(6, "0").slice(3, 6));
+    return (1000 * (Date.parse(end) - Date.parse(start)) + subMillis(end) - subMillis(start)) / 1000;
+  }
   const ms = value => value == null ? "—" : value + " ms";
   function money(micros) {
     const digits = String(micros ?? "");
@@ -144,6 +217,7 @@
   }
   function clearProject() {
     clearDetail();
+    resetExplorer();
     byId("report").hidden = true;
     for (const id of ["metrics","capabilities","tasks","scope","window","task-count","registered","release","cap-status"]) byId(id).replaceChildren();
   }
@@ -151,11 +225,44 @@
     clearTimeout(timer);
     projectRead?.abort(); projectRead = null; connection = null;
     clearProject();
+    view = "overview";
+    byId("views").hidden = true;
+    setViewButtons();
     byId("connect").hidden = false;
     byId("actions").hidden = true;
     byId("automatic").checked = false;
     byId("token").value = "";
     byId("status").textContent = "";
+  }
+  function setViewButtons() {
+    byId("overview-view").setAttribute("aria-pressed", String(view === "overview"));
+    byId("runs-view").setAttribute("aria-pressed", String(view === "runs"));
+  }
+  function clearTrace() {
+    byId("run-detail").hidden = true;
+    for (const id of ["trace-id","run-facts","trace","trace-note"]) byId(id).replaceChildren();
+  }
+  function chooseRun(run) {
+    instance = run;
+    tracePage = pageState();
+    for (const row of byId("instances").rows) row.classList.toggle("selected", row.dataset.run === run?.run_id);
+    clearTrace();
+  }
+  function clearRuns() {
+    byId("run-list").hidden = true;
+    byId("instances").replaceChildren();
+    byId("runs-release").replaceChildren();
+    clearTrace();
+  }
+  function resetExplorer() {
+    agentPage = pageState(); runPage = pageState(); tracePage = pageState(); agent = ""; instance = null;
+    byId("run-id").value = "";
+    byId("agent-version").replaceChildren();
+    byId("agent-version").disabled = true;
+    for (const id of ["agent-scope","agent-note"]) byId(id).replaceChildren();
+    for (const id of ["agents-prev","agents-next","instances-prev","instances-next","events-prev","events-next"]) byId(id).disabled = true;
+    byId("explorer").hidden = true;
+    clearRuns();
   }
   async function read(path, signal) {
     const response = await fetch(path, {method:"GET", cache:"no-store", redirect:"error",
@@ -232,6 +339,7 @@
   }
   async function refresh() {
     if (!connection) return;
+    if (view === "runs") return loadExplorer("agents");
     clearTimeout(timer);
     projectRead?.abort();
     const request = projectRead = new AbortController();
@@ -248,6 +356,173 @@
       clearProject();
       if (error.status === 401 || error.status === 403) disconnect();
       byId("status").textContent = error.status ? error.message : "无法读取监控数据，请检查连接后重试。";
+    } finally {
+      if (projectRead === request) { projectRead = null; schedule(); }
+    }
+  }
+  function query(page) {
+    const params = new URLSearchParams({hours:byId("hours").value, limit:"25"});
+    if (page.cursor) params.set("cursor", page.cursor);
+    return "?" + params;
+  }
+  function setPaging(prefix, page, next) {
+    page.next = next || null;
+    byId(prefix + "-prev").disabled = !page.previous.length;
+    byId(prefix + "-next").disabled = !page.next;
+  }
+  function changePage(which, forward) {
+    const pages = {agents:agentPage, runs:runPage, trace:tracePage};
+    const page = pages[which];
+    if (forward) {
+      if (!page.next) return;
+      page.previous.push(page.cursor); page.cursor = page.next;
+    } else {
+      if (!page.previous.length) return;
+      page.cursor = page.previous.pop();
+    }
+    page.next = null;
+    if (which === "trace") {
+      clearTrace();
+      loadExplorer("trace", true);
+      return;
+    }
+    if (which === "agents") {
+      agent = ""; runPage = pageState();
+      byId("agent-version").disabled = true;
+      byId("agent-version").replaceChildren();
+    }
+    instance = null;
+    byId("run-id").value = "";
+    clearRuns();
+    loadExplorer(which);
+  }
+  function renderAgents(data) {
+    const chooser = byId("agent-version");
+    chooser.replaceChildren(new Option("选择发布版本", ""));
+    for (const a of data.agents) {
+      const label = [a.profile, a.agent_version_id, a.run_count + " 次运行"].filter(Boolean).join(" · ");
+      chooser.add(new Option(label, a.agent_version_id));
+    }
+    if (agent && !data.agents.some(a => a.agent_version_id === agent)) {
+      // The selected release can move off a refreshed page. Its runs are reauthorized below.
+      chooser.add(new Option(agent + "（已选版本）", agent));
+    }
+    chooser.value = agent;
+    chooser.disabled = chooser.options.length <= 1;
+    byId("agent-scope").textContent = "项目 " + data.project_id + " · " +
+      (data.scope === "project" ? "全项目可见运行" : "当前主体可见运行") + " · 运行开始时间 " +
+      date(data.window_start) + " 至 " + date(data.window_end);
+    byId("agent-note").textContent = data.agents.length ? "" : "这个时间范围内没有可见运行。";
+    setPaging("agents", agentPage, data.next_cursor);
+  }
+  function renderRuns(data) {
+    byId("run-list").hidden = false;
+    byId("runs-release").textContent = "发布版本 " + data.agent_version_id;
+    const table = byId("instances");
+    table.replaceChildren();
+    for (const r of data.runs) {
+      const row = el("tr", "");
+      row.dataset.run = r.run_id;
+      row.classList.toggle("selected", instance?.run_id === r.run_id);
+      cell(row, date(r.started_at)); cell(row, r.task_id);
+      const attempt = r.run_id.slice(r.task_id.length + 1);
+      const button = el("button", "第 " + attempt + " 次");
+      button.type = "button"; button.className = "run-button";
+      button.setAttribute("aria-label", "查看任务 " + r.task_id + " 第 " + attempt + " 次运行");
+      button.addEventListener("click", () => {
+        byId("run-id").value = r.run_id;
+        chooseRun({task_id:r.task_id, run_id:r.run_id, attempt});
+        loadExplorer("trace", true);
+      });
+      cell(row, "").append(button);
+      cell(row, stateNames[r.state] || r.state);
+      cell(row, r.worker_id, "details");
+      table.append(row);
+    }
+    if (!table.rows.length) empty(table, 5, "此页没有可见运行实例。");
+    setPaging("instances", runPage, data.next_cursor);
+  }
+  function renderTrace(data, focus) {
+    byId("run-detail").hidden = false;
+    if (focus) byId("trace-heading").focus();
+    byId("trace-id").replaceChildren(el("code", data.run_id),
+      document.createTextNode(" · " + [data.profile, "发布版本 " + data.agent_version_id].filter(Boolean).join(" · ")));
+    const facts = byId("run-facts"), bill = data.accounting;
+    facts.replaceChildren();
+    for (const [label,value] of [
+      ["运行状态",stateNames[data.state] || data.state], ["Worker",data.worker_id],
+      ["开始时间",eventTime(data.started_at)], ["结束时间",eventTime(data.ended_at)],
+      ["观测运行耗时",ms(elapsedMs(data.started_at, data.ended_at))],
+      ["结算状态",accounting[bill.state] || bill.state], ["已结算",money(bill.settled_micros)],
+      ["已预留",money(bill.reserved_micros)], ["已知输入 / 输出 Token",
+        (bill.input_tokens ?? "—") + " / " + (bill.output_tokens ?? "—")]
+    ]) {
+      const block = el("div", ""); block.append(el("dt", label), el("dd", value)); facts.append(block);
+    }
+    const note = "第 " + (tracePage.previous.length + 1) + " 页 · " + data.events.length + " 个事件（本地时间）";
+    byId("trace-note").textContent = [note, data.error_code,
+      data.has_capability_spans ? "" : "本次运行没有可用的能力观测记录"].filter(Boolean).join(" · ");
+    renderEvents(byId("trace"), data.events);
+    setPaging("events", tracePage, data.next_before);
+  }
+  async function loadExplorer(level, focus = false, missingRun = null) {
+    if (!connection || view !== "runs") return;
+    clearTimeout(timer);
+    projectRead?.abort();
+    const request = projectRead = new AbortController();
+    const root = "/v1/projects/" + encodeURIComponent(connection.project) + "/agents";
+    let stage = level;
+    byId("explorer").hidden = false;
+    byId("status").textContent = "正在读取运行记录…";
+    try {
+      if (level === "agents") {
+        const data = await read(root + query(agentPage), request.signal);
+        if (request.signal.aborted) return;
+        if (data.project_id !== connection.project) throw new Error("project");
+        if (missingRun && data.agents.some(a => a.agent_version_id === missingRun.version)) agent = missingRun.version;
+        renderAgents(data);
+      }
+      if (agent && level !== "trace") {
+        stage = "runs";
+        const data = await read(root + "/" + encodeURIComponent(agent) + "/runs" + query(runPage), request.signal);
+        if (request.signal.aborted) return;
+        if (data.project_id !== connection.project || data.agent_version_id !== agent) throw new Error("release");
+        renderRuns(data);
+      }
+      if (instance) {
+        stage = "trace";
+        const before = tracePage.cursor ? "?" + new URLSearchParams({before:tracePage.cursor}) : "";
+        const data = await read("/v1/tasks/" + encodeURIComponent(instance.task_id) +
+          "/runs/" + encodeURIComponent(instance.attempt) + "/trace" + before, request.signal);
+        if (request.signal.aborted) return;
+        if (data.project_id !== connection.project) {
+          chooseRun(null);
+          byId("status").textContent = "这次运行不属于当前项目。";
+          return;
+        }
+        if (agent && data.agent_version_id !== agent) {
+          chooseRun(null);
+          byId("status").textContent = "这次运行与所选发布版本不一致。请更改或清除版本选择。";
+          return;
+        }
+        if (data.run_id !== instance.run_id || data.task_id !== instance.task_id) throw new Error("instance");
+        renderTrace(data, focus);
+      }
+      byId("status").textContent = missingRun ? "这次运行不存在或在当前权限下不可见。" : "更新于 " + date(Date.now());
+    } catch (error) {
+      if (request.signal.aborted) return;
+      if (stage === "trace" && error.status === 404) {
+        // A trace hides revoked access behind 404. Rebuild visible lists only after a fresh project check.
+        const version = agent, typedId = byId("run-id").value;
+        clearProject();
+        byId("run-id").value = typedId;
+        return loadExplorer("agents", false, {version});
+      }
+      if (error.status === 401 || error.status === 403) disconnect();
+      else if (stage === "trace") chooseRun(null);
+      else if (stage === "runs") { instance = null; clearRuns(); }
+      else { resetExplorer(); byId("explorer").hidden = false; }
+      byId("status").textContent = error.status ? error.message : "无法读取运行轨迹，请检查连接后刷新。";
     } finally {
       if (projectRead === request) { projectRead = null; schedule(); }
     }
@@ -270,22 +545,7 @@
         " · 发布版本 " + data.agent_version_id + (data.error_code ? " · " + data.error_code : "");
       byId("detail-status").textContent = (data.truncated ? "仅显示最近 " : "显示 ") +
         data.events.length + " 个事件（本地时间）";
-      for (const e of data.events) {
-        const row = el("tr", "");
-        cell(row, date(e.occurred_at)); cell(row, e.kind); cell(row, e.event); cell(row, e.attempt);
-        const details = cell(row, [e.model || e.name,e.version].filter(Boolean).join(" "), "details");
-        for (const key of ["digest","span_id","parent_span_id","dispatch_attempt_id","snapshot_id","receipt_ref"]) {
-          if (e[key]) details.append(el("small", key + " " + e[key]));
-        }
-        if (e.reservation_micros != null) details.append(el("small", "预留 " + money(e.reservation_micros)));
-        if (e.actual_micros != null) details.append(el("small", "结算 " + money(e.actual_micros)));
-        if (e.input_tokens != null || e.output_tokens != null) {
-          details.append(el("small", "输入 / 输出 Token " + (e.input_tokens ?? "—") + " / " + (e.output_tokens ?? "—")));
-        }
-        cell(row, ms(e.duration_ms)); cell(row, e.error_code, e.error_code ? "warning" : "");
-        table.append(row);
-      }
-      if (!data.events.length) empty(table, 7, "尚无可见事件。");
+      renderEvents(table, data.events);
     } catch (error) {
       if (request.signal.aborted) return;
       if (error.status === 401 || error.status === 403) {
@@ -294,6 +554,61 @@
         byId("detail-status").textContent = error.status ? error.message : "时间线读取失败。";
       }
     }
+  }
+  function renderEvents(table, events) {
+    table.replaceChildren();
+    for (const e of events) {
+      const row = el("tr", "");
+      if (e.error_code || e.event === "failed") row.className = "failed";
+      cell(row, eventTime(e.occurred_at)); cell(row, kinds[e.kind] || e.kind);
+      cell(row, eventNames[e.event] || e.event); cell(row, e.attempt);
+      const details = cell(row, [e.model || e.name,e.version].filter(Boolean).join(" "), "details");
+      for (const [key,label] of [["digest","版本摘要"],["span_id","调用"],["parent_span_id","父调用"],
+                                  ["dispatch_attempt_id","模型尝试"],["snapshot_id","快照"],["receipt_ref","回执摘要"]]) {
+        if (e[key]) details.append(el("small", label + " " + e[key]));
+      }
+      if (e.reservation_micros != null) details.append(el("small", "预留 " + money(e.reservation_micros)));
+      if (e.actual_micros != null) details.append(el("small", "结算 " + money(e.actual_micros)));
+      if (e.input_tokens != null || e.output_tokens != null) {
+        details.append(el("small", "输入 / 输出 Token " + (e.input_tokens ?? "—") + " / " + (e.output_tokens ?? "—")));
+      }
+      cell(row, ms(e.duration_ms)); cell(row, e.error_code, e.error_code ? "warning" : "");
+      table.append(row);
+    }
+    if (!events.length) empty(table, 7, "尚无可见事件。");
+  }
+  function switchView(next) {
+    if (view === next) return;
+    projectRead?.abort(); taskRead?.abort();
+    view = next;
+    setViewButtons();
+    byId("report").hidden = true;
+    resetExplorer();
+    clearDetail();
+    refresh();
+  }
+  byId("overview-view").addEventListener("click", () => switchView("overview"));
+  byId("runs-view").addEventListener("click", () => switchView("runs"));
+  byId("agent-version").addEventListener("change", event => {
+    agent = event.target.value; instance = null; runPage = pageState();
+    byId("run-id").value = "";
+    clearRuns(); loadExplorer("runs");
+  });
+  byId("find-run").addEventListener("submit", event => {
+    event.preventDefault();
+    const runId = byId("run-id").value.trim();
+    const parts = /^([^\s:/\\?#]+):([1-9]\d{0,19})$/.exec(runId);
+    if (!parts || parts[1] === "." || parts[1] === ".." || BigInt(parts[2]) > 18446744073709551615n) {
+      projectRead?.abort(); chooseRun(null); schedule();
+      byId("status").textContent = "请输入有效的运行 ID，格式为 任务 ID:尝试次数。";
+      return;
+    }
+    chooseRun({run_id:runId, task_id:parts[1], attempt:parts[2]});
+    loadExplorer("trace", true);
+  });
+  for (const [prefix,level] of [["agents","agents"],["instances","runs"],["events","trace"]]) {
+    byId(prefix + "-prev").addEventListener("click", () => changePage(level, false));
+    byId(prefix + "-next").addEventListener("click", () => changePage(level, true));
   }
   byId("connect").addEventListener("submit", event => {
     event.preventDefault();
@@ -306,12 +621,13 @@
     connection = {project,token};
     byId("connect").hidden = true;
     byId("actions").hidden = false;
+    byId("views").hidden = false;
     refresh();
   });
   byId("disconnect").addEventListener("click", disconnect);
   byId("refresh").addEventListener("click", refresh);
   byId("automatic").addEventListener("change", schedule);
-  byId("hours").addEventListener("change", () => { clearDetail(); refresh(); });
+  byId("hours").addEventListener("change", () => { clearDetail(); resetExplorer(); refresh(); });
   document.addEventListener("visibilitychange", schedule);
   window.addEventListener("pagehide", disconnect);
 })();

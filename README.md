@@ -2,11 +2,11 @@
 
 AgentOS 是以上下文管理为核心的企业 Agent 中台，底层权威数据库采用 MySQL。首个只读售后任务已经有 API、worker、模型网关与配套测试代码，当前状态为待统一测试。[启动、配置、调用和测试说明](docs/changes/m1-managed-support.md)
 
-单机容器部署使用 [Compose 配置](compose.yaml) 启动 MySQL、迁移、API 和独立 worker。三个业务监控入口、两个诊断接口、基础设施探针和首次部署步骤见 [Docker 部署与观测入口](docs/changes/docker-deployment.md)。
+单机容器部署使用 [Compose 配置](compose.yaml) 启动 MySQL、迁移、API 和独立 worker。监控页面和 API 共用端口，默认地址为 `http://127.0.0.1:8000/monitor`。[部署步骤、接口与探针](docs/changes/docker-deployment.md)
 
 ## 已确认的代码结构
 
-当前支持在同一发布中配置文本 Skill 和内置只读 Tool。启动 API 后通过 `/monitor` 查看项目汇总与单任务时间线。接入示例、迁移顺序、权限和监控口径见 [Skill、Tool 与项目监控](docs/changes/capability-monitoring.md)。
+当前支持在同一发布中配置文本 Skill 和内置只读 Tool。在 `/monitor` 输入项目和凭证后，可以查看项目汇总，也可以选择 Agent 发布版本，再按任务 ID 和尝试号查看一次运行的轨迹。同一任务被 worker 重新领取时产生新尝试。[Agent 运行轨迹与升级说明](docs/changes/agent-run-trace.md) · [Skill、Tool 与项目监控](docs/changes/capability-monitoring.md)
 
 | 路径 | 职责 |
 | --- | --- |

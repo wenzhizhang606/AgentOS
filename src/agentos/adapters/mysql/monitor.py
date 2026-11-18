@@ -16,21 +16,51 @@ def _stamp(dt):
     return dt.isoformat(timespec="microseconds") + "Z"
 
 
-def timeline(cur, task):
-    # The caller holds the task row. All writers of these observations take the same lock.
-    task_id = task["task_id"]
+def read_dispatch(cur, task_id):
     cur.execute("""SELECT dispatch_attempt_id,snapshot_id,
+                   CAST(snapshot->>'$.attempt' AS UNSIGNED) AS attempt,
                    snapshot->>'$.model' AS model,SHA2(receipt_id,256) AS receipt_ref,
                    reservation,actual_micros,input_tokens,output_tokens
                    FROM ag_dispatch WHERE task_id=%s""", (task_id,))
-    dispatch = cur.fetchone()
-    cur.execute("""SELECT event_id,sequence_no,attempt,event_type AS event,occurred_at
-                   FROM ag_task_event WHERE task_id=%s ORDER BY sequence_no DESC LIMIT 501""", (task_id,))
+    return cur.fetchone()
+
+
+def event_position(event):
+    if "sequence_no" in event:
+        return event["occurred_at"], 2, event["sequence_no"]
+    return event["occurred_at"], (0 if event["event"] == "started" else 1), event["span_id"]
+
+
+def _before(before, stream, time_column, id_column):
+    if before is None:
+        return "", ()
+    at, boundary_stream, identifier = before
+    if stream == boundary_stream:
+        return f"AND ({time_column},{id_column})<(%s,%s)", (at, identifier)
+    comparator = "<=" if stream < boundary_stream else "<"
+    return f"AND {time_column}{comparator}%s", (at,)
+
+
+def timeline_events(cur, task_id, dispatch, attempt=None, before=None):
+    # The caller holds the task row. All writers of these observations take the same lock.
+    task_filter = span_filter = ""
+    task_args = span_args = (task_id,)
+    if attempt is not None:
+        # A receipt may arrive after execution ends. Its owner is the admitted dispatch.
+        task_filter = """AND ((event_type NOT IN ('dispatch_admitted','receipt_settled') AND attempt=%s)
+                         OR (event_type IN ('dispatch_admitted','receipt_settled') AND %s))"""
+        task_args += (attempt, bool(dispatch and dispatch["attempt"] == attempt))
+        span_filter = "AND attempt=%s"
+        span_args += (attempt,)
+    boundary, key = _before(before, 2, "occurred_at", "sequence_no")
+    cur.execute(f"""SELECT event_id,sequence_no,attempt,event_type AS event,occurred_at
+                    FROM ag_task_event WHERE task_id=%s {task_filter} {boundary}
+                    ORDER BY occurred_at DESC,sequence_no DESC LIMIT 501""", (*task_args, *key))
     events = list(cur.fetchall())
     for event in events:
         event["kind"] = "task"
         if dispatch and event["event"] in ("dispatch_admitted", "receipt_settled"):
-            event.update(kind="model", dispatch_attempt_id=dispatch["dispatch_attempt_id"],
+            event.update(kind="model", attempt=dispatch["attempt"], dispatch_attempt_id=dispatch["dispatch_attempt_id"],
                          snapshot_id=dispatch["snapshot_id"], model=dispatch["model"])
             if event["event"] == "dispatch_admitted":
                 event["reservation_micros"] = str(dispatch["reservation"])
@@ -40,11 +70,12 @@ def timeline(cur, task):
                              output_tokens=str(dispatch["output_tokens"]) if dispatch["output_tokens"] is not None else None)
 
     for at, completed in (("started_at", False), ("ended_at", True)):
+        boundary, key = _before(before, int(completed), at, "span_id")
         cur.execute(f"""SELECT span_id,parent_span_id,attempt,kind,name,version,digest,outcome,error_code,
                         snapshot_id,{at} AS occurred_at,
                         TIMESTAMPDIFF(MICROSECOND,started_at,ended_at)/1000 AS duration_ms
-                        FROM ag_capability_span WHERE task_id=%s AND {at} IS NOT NULL
-                        ORDER BY {at} DESC, span_id DESC LIMIT 501""", (task_id,))
+                        FROM ag_capability_span WHERE task_id=%s {span_filter} AND {at} IS NOT NULL {boundary}
+                        ORDER BY {at} DESC,span_id DESC LIMIT 501""", (*span_args, *key))
         for span in cur.fetchall():
             event = {key: span[key] for key in ("span_id", "parent_span_id", "attempt", "kind", "name",
                                                 "version", "digest", "occurred_at")}
@@ -53,15 +84,19 @@ def timeline(cur, task):
                 event.update(error_code=span["error_code"], snapshot_id=span["snapshot_id"],
                              duration_ms=float(span["duration_ms"]))
             events.append(event)
-    # First prefer the committed sequence for simultaneous task events. Span finish follows start.
-    events.sort(key=lambda e: (e["occurred_at"], e.get("sequence_no", 0),
-                               e["event"] != "started", e.get("span_id", "")))
+    # Each SQL source uses this same order. At a tie, a span start precedes its finish.
+    events.sort(key=event_position)
     truncated = len(events) > 500
     events = events[-500:]
     for event in events:
         event["occurred_at"] = _stamp(event["occurred_at"])
+    return {"truncated": truncated, "events": events}
+
+
+def timeline(cur, task):
+    dispatch = read_dispatch(cur, task["task_id"])
     return {**{k: task[k] for k in ("task_id", "project_id", "agent_version_id", "state", "error_code")},
-            "truncated": truncated, "events": events}
+            **timeline_events(cur, task["task_id"], dispatch)}
 
 
 def project_report(cur, tenant, project, subject, end, hours, limit):

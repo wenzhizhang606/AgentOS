@@ -103,6 +103,58 @@ def test_ac_013_monitoring_grant_is_project_scoped(tmp_path, credential):
                                                    monitor_project_ids=("support",))
 
 
+@pytest.mark.parametrize("project_monitor", [False, True])
+def test_ac_013_browse_agent_then_read_one_attempt(tmp_path, credential, project_monitor):
+    if project_monitor:
+        credential["monitor_project_ids"] = ["support"]
+    store = Mock(spec=TaskStore)
+    store.list_observed_agents.return_value = {"agents": [{"agent_version_id": RELEASE}]}
+    store.get_agent_runs.return_value = {"runs": [{"task_id": "t1", "attempt": 2}]}
+    store.get_run_trace.return_value = {"events": [{"attempt": 2, "event": "claimed"}]}
+    with TestClient(create_app(store, load_credentials(tmp_path, [credential]), RELEASE)) as client:
+        base = "/v1/projects/support/agents"
+        result = client.get(base + "?include_all_subjects=true", headers=HEADERS)
+        assert result.status_code == 200 and result.json() == store.list_observed_agents.return_value
+        store.list_observed_agents.assert_called_once_with(
+            "tenant-A", "alice", "support", allowed_projects=("support",), include_all_subjects=project_monitor,
+            hours=24, limit=50, cursor=None)
+        runs = client.get(f"{base}/{RELEASE}/runs?hours=12&limit=5&cursor=page2", headers=HEADERS)
+        assert runs.status_code == 200 and runs.json() == store.get_agent_runs.return_value
+        store.get_agent_runs.assert_called_once_with(
+            "tenant-A", "alice", "support", RELEASE, allowed_projects=("support",),
+            include_all_subjects=project_monitor, hours=12, limit=5, cursor="page2")
+        trace = client.get("/v1/tasks/t1/runs/2/trace?before=earlier&monitor_project_ids=support", headers=HEADERS)
+        assert trace.status_code == 200 and trace.json() == store.get_run_trace.return_value
+        assert trace.headers["Cache-Control"] == "no-store"
+        store.get_run_trace.assert_called_once_with(
+            "tenant-A", "alice", "t1", 2, allowed_projects=("support",),
+            monitor_project_ids=("support",) if project_monitor else (), before="earlier")
+
+
+@pytest.mark.parametrize(("path", "status"), [
+    ("/v1/projects/payroll/agents", 403),
+    (f"/v1/projects/payroll/agents/{RELEASE}/runs", 403),
+    ("/v1/projects/support/agents?hours=169", 400),
+    (f"/v1/projects/support/agents/{RELEASE}/runs?limit=201", 400),
+    (f"/v1/projects/support/agents/{RELEASE}/runs?cursor=", 400),
+    ("/v1/tasks/t1/runs/0/trace", 400),
+    ("/v1/tasks/t1/runs/18446744073709551616/trace", 400),
+    ("/v1/tasks/t1/runs/1/trace?before=", 400),
+])
+def test_ac_012_013_run_browser_rejects_invalid_scope_and_bounds(client_store, path, status):
+    client, store = client_store
+    assert client.get(path, headers=HEADERS).status_code == status
+    assert not store.mock_calls
+
+
+@pytest.mark.parametrize("path", ["/v1/projects/support/agents", f"/v1/projects/support/agents/{RELEASE}/runs",
+                                  "/v1/tasks/t1/runs/1/trace"])
+def test_ac_012_run_browser_requires_credentials(client_store, path):
+    client, store = client_store
+    assert client.get(path).status_code == 401
+    assert not store.mock_calls
+
+
 @pytest.mark.parametrize("authorization", [None, "Basic arbitrary", "Bearer invalid"])
 def test_ac_012_invalid_credentials_never_reach_store(client_store, task, authorization):
     client, store = client_store

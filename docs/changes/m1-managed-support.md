@@ -14,7 +14,7 @@
    python -m pip install -e ".[test]"
    ```
 
-2. 在选好的空数据库中，通过 MySQL 客户端依次执行 `SOURCE D:/agentOS/migrations/mysql/001_managed_task.sql` 和 `SOURCE D:/agentOS/migrations/mysql/002_capability_monitoring.sql`。已有 M1 数据库只需补 002。新版 worker 在普通任务中也记录上下文准备事件。建表使用迁移账户。API、worker 和本地运维命令使用下列连接变量，密码从实际环境注入。
+2. 在选好的空数据库中，用迁移账户在 MySQL 客户端按顺序执行 `SOURCE D:/agentOS/migrations/mysql/001_managed_task.sql`、`SOURCE D:/agentOS/migrations/mysql/002_capability_monitoring.sql`、`SOURCE D:/agentOS/migrations/mysql/003_run_trace.sql`。已有数据库按顺序补齐缺少的迁移，再启动新版 API 与 worker。API、worker 和本地运维命令使用下列连接变量，密码从实际环境注入。
 
    ```powershell
    $env:AGENTOS_MYSQL_HOST = "127.0.0.1"

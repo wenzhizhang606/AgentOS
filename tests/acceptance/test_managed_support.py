@@ -72,7 +72,7 @@ def submit(client, request):
 
 
 @pytest.mark.parametrize("deployment", ["with_capabilities"], indirect=True)
-def test_ac_013_023_trace_from_skill_and_tool_to_settled_model(deployment):
+def test_ac_013_023_trace_from_skill_and_tool_to_settled_model(deployment, caplog):
     store, release, _, client, request = deployment
     task_id = submit(client, request)
     model = ChatModel(release.endpoint, "fixture-key")
@@ -80,7 +80,8 @@ def test_ac_013_023_trace_from_skill_and_tool_to_settled_model(deployment):
     reply = {"id": "observed-receipt", "usage": {"prompt_tokens": 100, "completion_tokens": 10},
              "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "七天 [E1]"}}]}
     model._transport.open.return_value = BytesIO(json.dumps(reply).encode())
-    assert run_one(store, model, release, "traced-worker")
+    with caplog.at_level("INFO", logger="agentos.runtime.managed_task"):
+        assert run_one(store, model, release, "traced-worker")
     sent = json.loads(model._transport.open.call_args.args[0].data)
     model_input = json.loads(sent["messages"][1]["content"])
     assert model_input["skills"][0]["name"] == "support.answer"
@@ -106,6 +107,21 @@ def test_ac_013_023_trace_from_skill_and_tool_to_settled_model(deployment):
     assert overview["summary"]["tasks_with_spans"] == overview["summary"]["dispatches"] == 1
     assert overview["summary"]["settled_micros"] == "120"
     assert overview["active_release"]["capabilities"] == release.catalog_metadata()
+
+    directory = "/v1/projects/support/agents"
+    agent, = client.get(directory).json()["agents"]
+    assert agent["agent_version_id"] == release.version_id
+    run, = client.get(f"{directory}/{release.version_id}/runs").json()["runs"]
+    assert (run["task_id"], run["attempt"], run["worker_id"]) == (task_id, 1, "traced-worker")
+    assert f'run_id={run["run_id"]} ' in caplog.text
+    trace = client.get(f'{task_url}/runs/{run["attempt"]}/trace')
+    assert trace.status_code == 200
+    detail = trace.json()
+    assert detail["run_id"] == run["run_id"] and detail["state"] == "succeeded"
+    assert detail["accounting"]["settled_micros"] == "120"
+    assert {e["kind"] for e in detail["events"]} == {"task", "context", "skill", "tool", "model"}
+    assert {e["attempt"] for e in detail["events"]} == {1}
+    assert request["goal"] not in trace.text and model_input["skills"][0]["text"] not in trace.text
 
 
 def test_ac_001_009_012_answer_charge_and_withdrawal(deployment):

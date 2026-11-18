@@ -6,7 +6,7 @@ import re
 from typing import Annotated, Literal, Protocol
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, Query, Request, Response
+from fastapi import Depends, FastAPI, Header, Path, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -15,6 +15,9 @@ from starlette.exceptions import HTTPException
 
 from agentos.contracts.errors import PlatformError
 from agentos.governance.auth import Authenticator, Identity
+
+
+PageCursor = Annotated[str | None, Query(min_length=1, max_length=1024)]
 
 
 class TaskStore(Protocol):
@@ -29,6 +32,12 @@ class TaskStore(Protocol):
                        include_all_subjects, hours, limit) -> dict: ...
     def get_timeline(self, tenant_id, subject_id, task_id, *, allowed_projects,
                      monitor_project_ids) -> dict: ...
+    def list_observed_agents(self, tenant_id, subject_id, project_id, *, allowed_projects,
+                             include_all_subjects, hours, limit, cursor) -> dict: ...
+    def get_agent_runs(self, tenant_id, subject_id, project_id, agent_version_id, *, allowed_projects,
+                       include_all_subjects, hours, limit, cursor) -> dict: ...
+    def get_run_trace(self, tenant_id, subject_id, task_id, attempt, *, allowed_projects,
+                      monitor_project_ids, before) -> dict: ...
 
 
 class Budget(BaseModel):
@@ -121,6 +130,11 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
         header = f"{credentials.scheme} {credentials.credentials}" if credentials else None
         return authenticator.authenticate(header)
 
+    def project_identity(project_id: str, identity: Annotated[Identity, Depends(authenticate)]) -> Identity:
+        if project_id not in identity.project_ids:
+            raise PlatformError("FORBIDDEN", "Project outside credential scope")
+        return identity
+
     def idempotency_key(value: Annotated[str, Header(alias="Idempotency-Key")]) -> str:
         if not re.fullmatch(r"[!-~]{1,128}", value):
             raise PlatformError("INVALID_ARGUMENT", "Expected a printable idempotency key of up to 128 characters")
@@ -192,11 +206,9 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
                                   allowed_projects=identity.project_ids)
 
     @app.get("/v1/projects/{project_id}/monitoring")
-    def project_monitoring(project_id: str, identity: Annotated[Identity, Depends(authenticate)],
+    def project_monitoring(project_id: str, identity: Annotated[Identity, Depends(project_identity)],
                            hours: Annotated[int, Query(ge=1, le=168)] = 24,
                            limit: Annotated[int, Query(ge=1, le=200)] = 50):
-        if project_id not in identity.project_ids:
-            raise PlatformError("FORBIDDEN", "Project outside credential scope")
         overview = store.get_monitoring(identity.tenant_id, identity.subject_id, project_id,
                                         allowed_projects=identity.project_ids,
                                         include_all_subjects=project_id in identity.monitor_project_ids,
@@ -204,10 +216,36 @@ def create_app(store: TaskStore, authenticator: Authenticator, agent_version_id:
         return {**overview, "active_release": {"version_id": agent_version_id,
                                               "capabilities": capability_catalog}}
 
+    def run_browser_options(project_id: str, identity: Annotated[Identity, Depends(project_identity)],
+                            hours: Annotated[int, Query(ge=1, le=168)] = 24,
+                            limit: Annotated[int, Query(ge=1, le=200)] = 50,
+                            cursor: PageCursor = None):
+        return {"allowed_projects": identity.project_ids,
+                "include_all_subjects": project_id in identity.monitor_project_ids,
+                "hours": hours, "limit": limit, "cursor": cursor}
+
+    @app.get("/v1/projects/{project_id}/agents")
+    def observed_agents(project_id: str, identity: Annotated[Identity, Depends(project_identity)],
+                        options: Annotated[dict, Depends(run_browser_options)]):
+        return store.list_observed_agents(identity.tenant_id, identity.subject_id, project_id, **options)
+
+    @app.get("/v1/projects/{project_id}/agents/{agent_version_id}/runs")
+    def agent_runs(project_id: str, agent_version_id: Annotated[str, Path(max_length=128)],
+                   identity: Annotated[Identity, Depends(project_identity)],
+                   options: Annotated[dict, Depends(run_browser_options)]):
+        return store.get_agent_runs(identity.tenant_id, identity.subject_id, project_id, agent_version_id, **options)
+
     @app.get("/v1/tasks/{task_id}/timeline")
     def task_timeline(task_id: str, identity: Annotated[Identity, Depends(authenticate)]):
         return store.get_timeline(identity.tenant_id, identity.subject_id, task_id,
                                   allowed_projects=identity.project_ids,
                                   monitor_project_ids=identity.monitor_project_ids)
+
+    @app.get("/v1/tasks/{task_id}/runs/{attempt}/trace")
+    def run_trace(task_id: str, attempt: Annotated[int, Path(ge=1, le=2**64 - 1)],
+                  identity: Annotated[Identity, Depends(authenticate)], before: PageCursor = None):
+        return store.get_run_trace(identity.tenant_id, identity.subject_id, task_id, attempt,
+                                   allowed_projects=identity.project_ids,
+                                   monitor_project_ids=identity.monitor_project_ids, before=before)
 
     return app
