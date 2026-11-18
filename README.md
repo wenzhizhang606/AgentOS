@@ -2,6 +2,8 @@
 
 AgentOS 是以上下文管理为核心的企业 Agent 中台，底层权威数据库采用 MySQL。首个只读售后任务包含 API、worker 和模型网关。2026-11-18 的单机部署验收使用真实 MySQL、Chromium 和模型替身，147 个测试用例全部通过。[启动与调用](docs/changes/m1-managed-support.md) · [验收环境及结果](docs/changes/model-rag-environment.md#服务器验收)
 
+验收当前发布时，可以先在监控页面复查一笔已有运行，再用退货政策验证回答、引用、预算和权限。操作手册提供可复制的命令、逐项通过条件以及业务试点的签字口径。[M1 验收操作手册](docs/changes/m1-acceptance-walkthrough.md)
+
 单机容器部署使用 [Compose 配置](compose.yaml) 启动 MySQL、迁移、API 和独立 worker。监控页面和 API 共用端口，默认地址为 `http://127.0.0.1:8000/monitor`。[部署步骤、接口与探针](docs/changes/docker-deployment.md)
 
 首次配置时，将根目录的 `.env.example` 复制为 `.env`，填写模型部署名、完整的 Chat Completions API 地址和密钥，并按需调整词法检索参数。API 和 worker 使用相同的模型和检索配置生成发布 ID。[配置模板](.env.example) · [参数与生效方式](docs/changes/model-rag-environment.md)

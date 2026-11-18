@@ -18,8 +18,8 @@
 例如分配 8,192 Token 总窗口并检索最多 3 项时，可以在已有 `.env` 中设置以下字段。模型名、地址和单价按实际供应商配置，密钥单独填写。
 
 ```dotenv
-AGENTOS_MODEL_NAME=your-pinned-model-id
-AGENTOS_MODEL_API_URL=https://model.example.com/v1/chat/completions
+AGENTOS_MODEL_NAME=gpt-6.1-sol
+AGENTOS_MODEL_API_URL=https://llapi.org/v1/chat/completions
 AGENTOS_MODEL_WINDOW_TOKENS=8192
 AGENTOS_MODEL_MAX_OUTPUT_TOKENS=512
 AGENTOS_MODEL_SAFETY_MARGIN_TOKENS=128
@@ -45,3 +45,15 @@ AGENTOS_RAG_BODY_WEIGHT=1
 | Compose 配置传递、容器健康和页面探针 | 从可访问 Docker CLI 的宿主机启用 `AGENTOS_TEST_COMPOSE=1`，执行 `python -m pytest tests/integration/test_compose_deployment.py` | 4 项通过 |
 
 两份 JUnit 报告共 147 个不同用例，失败、错误和跳过均为 0。FastAPI 的测试客户端依赖报告了 1 条弃用提示。报告保存在部署目录 `local/test-results/2026-11-18/`。运行中的 API 与 worker 算出了相同的发布 ID，实测从环境读取了测试模型名和 `AGENTOS_RAG_TOP_K=3`。健康、就绪、监控页面和受权项目 Agent 列表均返回 HTTP 200。
+
+### 真实模型验收
+
+2026-11-18 通过任务 API 提交了一笔虚构退货问题。worker 向配置的 LLAPI Chat Completions 端点请求 `gpt-6.1-sol`。该次运行从 worker 领取到成功耗时 7.92 秒，返回“七天 [E1]”。引用与快照都指向 `return-policy` 第 1 版的 `section-1`。轨迹记录了上下文、文本 Skill、检索 Tool、一次模型发送准入和一次回执结算。重复提交相同请求得到原任务 ID。项目接口无令牌返回 401，使用本项目令牌读取未授权项目返回 403。
+
+| 对账项目 | 实测值 |
+| --- | --- |
+| 供应商回执用量 | 输入 4,656 Token，输出 39 Token |
+| 平台账本 | 发送时预留 10,240 微元，按发布配置单价结算 4,812 微元（0.004812 元），结算后预留为 0。供应商实扣金额待账单核对。 |
+| 输入估算 | 本地按请求 UTF-8 字节数估算为 1,265，供应商回执多计 3,391 Token，差值超过配置的 128 Token 安全余量。本次实际输入仍在发布配置的 7,552 Token 输入预算内。生产窗口上界和费用上界需另行校准。 |
+
+本次实测覆盖一个正向案例。发布与运行 ID、快照元数据、逐项检查及账本详见服务器私有回执 `local/test-results/2026-11-18/llapi-m1-live/receipt.json`。三项公开基准和企业业务质量仍待单独评测。[复查本次轨迹](m1-acceptance-walkthrough.md) · [质量指标与公开基准](../requirements/agentos-platform.md#m1-公开评测基准)
