@@ -28,6 +28,8 @@ AgentOS 是以上下文管理为核心的企业 Agent 中台。API 受理任务�
 
 仓库级编码试点采用 SWE-Bench Pro V2 Full 的 1 道 Open Library 题。`gpt-6.1-sol` 一次生成补丁，官方 5 项缺陷测试和 15 项回归测试全部通过。样本规模为 1 题，全榜规模为 642 题。[近期模型报告、运行记录及官方评分](docs/research/swe-model-report-pilot.md)
 
+2026-11-19 的全量计划已核对 11 个仓库、642 道题和 3,210 个判分文件。现有服务器 Docker 数据盘预检可用 3.10 GiB，本批次默认单题准入门槛为 12 GiB。目前 642 题均待执行，全量解决率待判分。[全量计划、空间预检与进度查询](docs/changes/swe-pro-full.md)
+
 ## 已确认的代码结构
 
 当前支持在同一发布中配置文本 Skill 和内置只读 Tool。同一任务被 worker 重新领取时产生新尝试，可在控制台按任务 ID 和尝试号区分。[Agent 运行轨迹与升级说明](docs/changes/agent-run-trace.md) · [Skill、Tool 与项目监控](docs/changes/capability-monitoring.md)

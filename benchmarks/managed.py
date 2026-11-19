@@ -36,11 +36,16 @@ def private_dir(name):
     return Path("local/benchmarks") / name
 
 
-def projects(name):
-    return [f"{name}-{slot:02d}" for slot in range(1, MAX_TASKS + 1)]
+def projects(name, count=MAX_TASKS):
+    if not 1 <= count <= 642:
+        raise ValueError("Expected 1 to 642 benchmark projects")
+    return [f"{name}-{slot:02d}" for slot in range(1, count + 1)]
 
 
-def provision(name):
+def provision(name, count=MAX_TASKS, *, credential_hours=4):
+    if type(credential_hours) is not int or credential_hours < 1:
+        raise ValueError("Credential validity must be a positive number of hours")
+    expires_at = utc_after(credential_hours * 60)
     directory = private_dir(name)
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     token_path = directory / "token"
@@ -52,9 +57,9 @@ def provision(name):
         "token_sha256": sha256(token.encode("ascii")).hexdigest(),
         "tenant_id": name,
         "subject_id": "runner",
-        "project_ids": projects(name),
-        "monitor_project_ids": projects(name),
-        "expires_at": utc_after(240),
+        "project_ids": projects(name, count),
+        "monitor_project_ids": projects(name, count),
+        "expires_at": expires_at,
     }]})
     manifest.chmod(0o444)
 
@@ -72,9 +77,16 @@ def read_release():
     return json.loads(compose_python("worker", """
 import json, os
 from agentos.control.release import Release
+from agentos.context.service import _request
 r = Release.load(os.environ["AGENTOS_RELEASE_FILE"], environ=os.environ)
+skills = [{**c.metadata(), "source": c.source, "trust": "profile_guidance", "text": c.text}
+          for c in r.capabilities if c.kind == "skill"]
+empty = {"label": "E1", "source_id": "", "version": 1, "location": "", "title": "", "text": ""}
+frame = _request(r.model, r.max_output_tokens, "", [empty], skills)
 print(json.dumps({"id": r.version_id, "model": r.model, "endpoint": r.endpoint,
-                  "reservation_micros": r.reservation_micros, "max_output_tokens": r.max_output_tokens}))
+                  "reservation_micros": r.reservation_micros, "max_output_tokens": r.max_output_tokens,
+                  "window_tokens": r.window_tokens, "safety_margin_tokens": r.safety_margin_tokens,
+                  "empty_swe_wire_bytes": len(frame)}))
 """))
 
 
@@ -92,16 +104,23 @@ for source in data["sources"]:
 
 
 class ManagedRunner:
-    def __init__(self, name, port):
+    def __init__(self, name, port, *, case_labels=None, total_reserved_micros=MAX_TOTAL_RESERVED_MICROS):
         self.name = name
         self.directory = private_dir(name)
+        self.assigned_projects = None
+        if case_labels is not None:
+            labels = tuple(case_labels)
+            if len(set(labels)) != len(labels):
+                raise ValueError("Duplicate benchmark case")
+            self.assigned_projects = dict(zip(labels, projects(name, len(labels)), strict=True))
         self.token = (self.directory / "token").read_text(encoding="ascii").strip()
         self.port = port
         self.release = read_release()
         if (self.release["model"], self.release["endpoint"]) != (ALLOWED_MODEL, ALLOWED_ENDPOINT):
             raise ValueError("Unexpected live benchmark model or destination")
         reservation = self.release["reservation_micros"]
-        if reservation <= 0 or MAX_TASKS * reservation > MAX_TOTAL_RESERVED_MICROS:
+        count = MAX_TASKS if self.assigned_projects is None else len(self.assigned_projects)
+        if reservation <= 0 or count * reservation > total_reserved_micros:
             raise ValueError("The configured release would exceed the benchmark reservation envelope")
         self.api("GET", "/readyz", expected={200})
 
@@ -121,20 +140,27 @@ class ManagedRunner:
             connection.close()
 
     def run_task(self, case_label, question, sources):
+        if self.assigned_projects is not None and case_label not in self.assigned_projects:
+            raise ValueError("Case is absent from the frozen benchmark manifest")
         case = self.directory / sha256(case_label.encode("utf-8")).hexdigest()[:24]
         plan_file = case / "plan.json"
-        saved = sorted(self.directory.glob("*/plan.json"))
         source_digest = sha256(json.dumps(sources, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
         if plan_file.exists():
             plan = json.loads(plan_file.read_text(encoding="utf-8"))
             if (plan["label"] != case_label or plan["source_digest"] != source_digest
-                    or plan["request"]["goal"] != question or plan["request"]["agent_version_id"] != self.release["id"]):
+                    or plan["request"]["goal"] != question or plan["request"]["agent_version_id"] != self.release["id"]
+                    or (self.assigned_projects is not None
+                        and self.assigned_projects[case_label] != plan["request"]["project_id"])):
                 raise ValueError("Use a new benchmark run for changed inputs or release")
         else:
-            slots = projects(self.name)
-            if len(saved) >= len(slots):
-                raise ValueError("Live benchmark task cap reached")
-            project = slots[len(saved)]
+            if self.assigned_projects is not None:
+                project = self.assigned_projects[case_label]
+            else:
+                saved = list(self.directory.glob("*/plan.json"))
+                slots = projects(self.name)
+                if len(saved) >= len(slots):
+                    raise ValueError("Live benchmark task cap reached")
+                project = slots[len(saved)]
             case.mkdir(exist_ok=True, mode=0o700)
             plan = {"label": case_label, "source_digest": source_digest, "request": {
                 "project_id": project,
@@ -163,7 +189,9 @@ class ManagedRunner:
             created = self.api("POST", "/v1/tasks", expected={200, 202}, payload=payload,
                                key=f"{self.name}-{case.name}")
             task_id = created["task_id"]
-            id_file.write_text(task_id, encoding="ascii")
+            temp_id = id_file.with_suffix(".part")
+            temp_id.write_text(task_id, encoding="ascii")
+            temp_id.replace(id_file)
         path = f"/v1/tasks/{task_id}"
         deadline = time.monotonic() + 9 * 60
         while True:
