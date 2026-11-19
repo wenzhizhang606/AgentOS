@@ -137,3 +137,7 @@ TASK-009 在主页增加可联动的组成图。两个浏览器示例共用演�
 ## 2026-11-19 · SWE-Bench Pro V2 Full 全量准备
 
 TASK-010 / AC-014 已核对上游固定提交中的 642 份题面、镜像绑定及 3,210 个判分文件，并以只检出 82 个实例的旧目录验证不完整清单会被拒绝。批次按每题声明的空间逐题准入，判分器故障单列，最终解决率使用固定全量分母。发现、计划与容量预检已有记录，真实模型和判分容器的全量结果待验证。[全量批次与验收口径](../changes/swe-pro-full.md) · [官方套件](https://github.com/scaleapi/SWE-bench_Pro-os/tree/66f92766bba642462d4bbe5479e83f91f9211862/v2)
+
+## 2026-11-19 · 首页示例中 Skill 的来源
+
+TASK-009 / AC-013 补全任务创建时指定发布版本这一步。核对 API 的 `agent_version_id`、worker 领取条件和上下文准备顺序，确认同一版本的退货与发票任务加载相同的答复规范。模型调用次数随检索是否取得作答证据而变化。在浏览器示例中分别呈现发布绑定、Skill 加载、检索结果和模型调用。[交互设计](console-ui.md) · [发布清单](../../examples/m1/release-capabilities.json) · [受管运行时](../../src/agentos/runtime/managed_task.py)

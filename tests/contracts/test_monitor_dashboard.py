@@ -118,6 +118,7 @@ def test_ac013_public_walkthrough_follows_components_without_project_requests(mo
             demo = page.locator("#home-walkthrough")
             diagram = page.locator("#agent-diagram")
             play, previous, advance = (demo.locator(selector) for selector in ("#walk-play", "#walk-prev", "#walk-next"))
+            artifact = demo.locator("#walk-artifact")
 
             def verify_step(module):
                 assert diagram.get_attribute("data-active") == module
@@ -126,39 +127,47 @@ def test_ac013_public_walkthrough_follows_components_without_project_requests(mo
                 surface = diagram.locator(f'[data-module="{module}"] .diagram-surface')
                 assert surface.evaluate("el => parseFloat(getComputedStyle(el).strokeWidth)") >= 3
 
-            verify_step("skill")
+            assert "离线演示" in demo.inner_text()
+            verify_step("runtime")
+            release_artifact = artifact.inner_text()
+            assert "support.answer@1.0.0" in release_artifact and "knowledge.search@1.0.0" in release_artifact
             page.clock.fast_forward(30_000)
-            verify_step("skill")
+            verify_step("runtime")
             assert previous.is_disabled()
             advance.focus()
             page.keyboard.press("Enter")
-            verify_step("tool")
+            verify_step("skill")
+            skill_artifact = artifact.inner_text()
+            assert "support.answer@1.0.0" in skill_artifact and "模型调用 0 次" in skill_artifact
             previous.click()
             play.click()
             page.clock.fast_forward(30_000)
-            verify_step("tool")
+            verify_step("skill")
             play.click()
             page.clock.fast_forward(30_000)
-            verify_step("tool")
-            for module in ("context", "model", "trace"):
+            verify_step("skill")
+            for module in ("tool", "context", "model", "trace"):
                 advance.click()
                 verify_step(module)
                 if module == "model":
                     assert "[E1]" in demo.inner_text()
-            assert advance.is_disabled()
+            assert advance.is_disabled() and "模型调用 1 次" in artifact.inner_text()
 
             play.click()
-            verify_step("skill")
+            verify_step("runtime")
             demo.locator('[data-scene="invoice"]').click()
             assert "发票" in demo.locator("#walk-question").inner_text()
             page.clock.fast_forward(30_000)
-            verify_step("skill")
-            for module in ("tool", "context", "trace"):
+            verify_step("runtime")
+            assert artifact.inner_text() == release_artifact
+            for module in ("skill", "tool", "context", "trace"):
                 advance.click()
                 verify_step(module)
-                if module == "context":
-                    assert "MISSING_EVIDENCE" in demo.locator("#walk-artifact").inner_text()
-            assert advance.is_disabled() and "模型准入 0 次" in demo.locator("#walk-artifact").inner_text()
+                if module == "skill":
+                    assert artifact.inner_text() == skill_artifact
+                elif module == "context":
+                    assert "MISSING_EVIDENCE" in artifact.inner_text()
+            assert advance.is_disabled() and "模型调用 0 次" in artifact.inner_text()
 
             for width in (320, 1000, 1440):
                 page.set_viewport_size({"width": width, "height": 850})

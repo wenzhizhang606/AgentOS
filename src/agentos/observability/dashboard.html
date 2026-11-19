@@ -50,7 +50,7 @@
       <section id="home-walkthrough" aria-labelledby="walkthrough-heading">
         <header class="home-section-heading">
           <h2 id="walkthrough-heading">运行示例</h2>
-          <p>在浏览器中播放模拟任务，观察每一步用到的组件。</p>
+          <p>两个问题交给同一版售后 Agent。以下为离线演示，调用次数表示示例中的执行情况。</p>
         </header>
         <div class="walk-scenes" role="group" aria-label="选择示例场景">
           <button type="button" data-scene="returns" aria-pressed="true">退货期限</button>
@@ -72,7 +72,7 @@
           <button type="button" id="walk-prev" disabled>上一步</button>
           <button type="button" id="walk-next">下一步</button>
         </div>
-        <noscript>退货期限示例中，Agent 加载 Skill、检索退货政策、组装上下文，再由模型生成带引用的回答。发票补开示例在检索不到依据时停止。启用 JavaScript 可逐步查看。</noscript>
+        <noscript>两个任务都指定同一发布版本，加载该版本绑定的 support.answer@1.0.0。退货问题找到条款，通过准入后调用模型 1 次。发票问题缺少条款，模型调用 0 次。启用 JavaScript 可逐步查看。</noscript>
       </section>
     </div>
   </section>
